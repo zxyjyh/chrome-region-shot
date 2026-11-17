@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Region Shot · 区域截图",
+  "version": "1.0.0",
+  "description": "在网页上拖拽框选任意区域，截图并保存为 PNG。",
+  "minimum_chrome_version": "110",
+  "permissions": ["activeTab", "scripting", "downloads"],
+  "action": {
+    "default_title": "框选截图 (Alt+Shift+S)"
+  },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Alt+Shift+S",
+        "mac": "Alt+Shift+S"
+      }
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}
