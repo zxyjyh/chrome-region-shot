@@ -1,0 +1,11 @@
+{
+  "name": "region-shot",
+  "version": "1.6.0",
+  "private": true,
+  "description": "Region Shot · 区域截图 — Chrome 扩展",
+  "scripts": {
+    "icons": "node scripts/build-icons.js",
+    "pack": "node scripts/pack.js",
+    "test": "node test/e2e.js"
+  }
+}

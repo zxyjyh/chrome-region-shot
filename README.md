@@ -83,6 +83,36 @@ node test/e2e.js --dpr 2    # Retina
 
 依赖 Node 18+、`ws` 模块（全局安装也行）、Chrome。
 
+## 图标
+
+源文件是矢量图，在 `icons/` 下：
+
+| 文件 | 用途 |
+|---|---|
+| `icon-full.svg` | 128 / 48 px |
+| `icon-32.svg` | 32 px 专用（线更粗、元素更少） |
+| `icon-16.svg` | 16 px 专用（只保留箭头和一条上边界） |
+
+**为什么小尺寸不直接缩放**：128px 的角标框缩到 16px 时线宽只剩约 1px，会和背景糊成一团。所以 16/32 单独画了简化版。`icons/preview-sizes.png` 是两套方案在 128/48/32/16 下的对比图。
+
+重新生成 PNG：
+
+```bash
+npm run icons
+```
+
+脚本会断言输出必须是 RGBA——否则圆角外侧会变成白色方块。
+
+> 踩过的坑：`--default-background-color=00000000` 这个常见的"透明截图"启动参数在 Chrome 157 的 headless 下会让**页面 target 完全不出现**（`/json/list` 里只剩 service_worker），导致脚本连不上页面。正确做法是去掉该参数，改用 CDP 的 `Emulation.setDefaultBackgroundColorOverride` 配合 `omitBackground: true`。
+
+## 打包上架
+
+```bash
+npm run pack
+```
+
+产物在 `dist/region-shot-<version>.zip`。文件清单从 manifest 反推，`test/`、`scripts/`、`*.md` 不会被打进去。详细的上架流程见 `PUBLISHING.md`，表单文案见 `store-listing.md`。
+
 ## 可扩展方向
 
 - 截图完成后直接复制到剪贴板

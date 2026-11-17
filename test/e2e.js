@@ -86,6 +86,16 @@ function prepareExtension() {
     bg + '\n\n// e2e 测试专用导出（仅存在于测试副本）\nself.__selftest = { runCapture, captureByScroll, readGeo };\n'
   );
 
+  // manifest 的 icons 指向 icons/*.png，测试副本也必须带上，否则 Chrome 拒绝加载
+  const iconsSrc = path.join(ROOT, 'icons');
+  if (fs.existsSync(iconsSrc)) {
+    const iconsDst = path.join(EXT, 'icons');
+    fs.mkdirSync(iconsDst, { recursive: true });
+    for (const f of fs.readdirSync(iconsSrc)) {
+      if (f.endsWith('.png')) fs.copyFileSync(path.join(iconsSrc, f), path.join(iconsDst, f));
+    }
+  }
+
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.json'), 'utf8'));
   manifest.host_permissions = ['<all_urls>'];
   if (!manifest.permissions.includes('tabs')) manifest.permissions.push('tabs');
