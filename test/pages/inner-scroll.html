@@ -1,0 +1,24 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>e2e · 内部容器滚动</title>
+<style>
+  html, body { margin: 0; padding: 0; overflow: hidden; }
+  #header { height: 60px; background: #333; color: #fff; font: 14px/60px sans-serif; padding-left: 12px; }
+  /* 主内容区自己滚动，window 完全不滚 —— 大量 SPA 是这种结构 */
+  #scroller { height: calc(100vh - 60px); overflow-y: auto; background: #eee; }
+  .band { height: 1000px; position: relative; }
+  .label { position: absolute; top: 20px; left: 20px; font: 28px/1 sans-serif; }
+</style></head>
+<body>
+<div id="header">HEADER (60px)</div>
+<div id="scroller">
+  <div class="band" style="background:#ff0000"><div class="label">BAND-0 RED (0-1000)</div></div>
+  <div class="band" style="background:#00ff00"><div class="label">BAND-1 GREEN (1000-2000)</div></div>
+  <div class="band" style="background:#0000ff;color:#fff"><div class="label">BAND-2 BLUE (2000-3000)</div></div>
+  <div class="band" style="background:#ffff00"><div class="label">BAND-3 YELLOW (3000-4000)</div></div>
+  <div class="band" style="background:#ff00ff"><div class="label">BAND-4 MAGENTA (4000-5000)</div></div>
+</div>
+<script>
+  window.__testScrollTop = () => document.getElementById('scroller').scrollTop;
+  window.__testScrollTo = (y) => { document.getElementById('scroller').scrollTop = y; };
+</script>
+</body></html>

@@ -1,0 +1,31 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>e2e · iframe 内部滚动</title>
+<style>
+  html, body { margin: 0; padding: 0; overflow: hidden; }
+  #header { height: 46px; background: #333; color: #fff; font: 14px/46px sans-serif; padding-left: 12px; }
+  /* 正文全部在同源 iframe 里，外层页面本身不滚 —— 很多文档站是这种结构 */
+  #scroller { display: block; width: 100%; height: calc(100vh - 46px); border: 0; }
+</style></head>
+<body>
+<div id="header">HEADER (46px)</div>
+<iframe id="scroller"></iframe>
+<script>
+  const band = (color, text, dark) =>
+    '<div style="height:1000px;position:relative;background:' + color + ';' + (dark ? 'color:#fff;' : '') + '">' +
+      '<div style="position:absolute;top:20px;left:20px;font:28px/1 sans-serif">' + text + '</div>' +
+    '</div>';
+
+  document.getElementById('scroller').srcdoc =
+    '<style>html,body{margin:0;padding:0}</style>' +
+    band('#ff0000', 'BAND-0 RED (0-1000)', false) +
+    band('#00ff00', 'BAND-1 GREEN (1000-2000)', false) +
+    band('#0000ff', 'BAND-2 BLUE (2000-3000)', true) +
+    band('#ffff00', 'BAND-3 YELLOW (3000-4000)', false) +
+    band('#ff00ff', 'BAND-4 MAGENTA (4000-5000)', false);
+
+  const doc = () => document.getElementById('scroller').contentDocument;
+  const se = () => (doc() && (doc().scrollingElement || doc().documentElement)) || null;
+  window.__testScrollTo = (y) => { const s = se(); if (s) s.scrollTop = y; };
+  window.__testScrollTop = () => { const s = se(); return s ? s.scrollTop : 0; };
+</script>
+</body></html>
