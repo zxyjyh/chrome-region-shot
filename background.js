@@ -1,15 +1,13 @@
-// Region Shot · 区域截图（滚动拼接）
+// Region Shot · 区域截图（CDP 方案）
 //
-// 关键修正（相对上一版）：
-// 1. service worker 里不再用 fetch(dataUrl) 解码截图（MV3 worker 环境不稳定），
-//    改为手动 base64 -> Uint8Array -> Blob。
-// 2. 滚动直接操作 document.scrollingElement.scrollTop，不再依赖 window.scrollBy。
-// 3. 选区阶段拦截 wheel 事件，避免 Mac 触摸板两指滑动把页面滚走、选区错位。
-// 4. 用扩展图标角标显示进度，失败时显示 "!"，方便定位卡在哪里。
+// 放弃“截图时滚动页面”的做法，改用 Chrome 调试协议的 Page.captureScreenshot：
+// captureBeyondViewport 可以直接渲染视口之外的区域，因此不需要真的滚动，
+// 也就没有“滚不动 / 滚动距离对不上 / 固定元素重复”这些问题。
+//
+// 选区语义：用户框出 x 范围和起点 y，扩展截取「从选区顶部到页面底部」的该 x 范围内容。
 
-const CAPTURE_INTERVAL_MS = 650; // captureVisibleTab 有每秒约 2 次的配额
-const MAX_FRAMES = 80;
-const MAX_STAGE_HEIGHT = 16384; // 拼接画布最大高度（设备像素）
+const MAX_SEGMENT_DEVICE = 16000; // 单次 CDP 截图的设备像素高度上限
+const MAX_TOTAL_DEVICE = 30000; // 最终画布的设备像素高度上限
 
 chrome.action.onClicked.addListener((tab) => {
   runCapture(tab).catch((err) => {
@@ -29,7 +27,7 @@ async function runCapture(tab) {
 
   setBadge(tab.id, '');
 
-  // 1) 选区
+  // 1) 选区（只需要 x 范围和一屏内的起点，不需要滚动）
   let rect;
   try {
     const [sel] = await exec(tab.id, selectionOverlay);
@@ -42,78 +40,121 @@ async function runCapture(tab) {
   if (!rect) return;
   console.log('[RegionShot] 选区', rect);
 
-  const dpr = rect.dpr || 1;
-  const outW = Math.max(1, Math.round(rect.w * dpr));
-  const outH = Math.max(1, Math.round(rect.h * dpr));
+  const target = { tabId: tab.id };
 
-  // 2) 初始化滚动状态
+  // 2) 附加调试器
   try {
-    const [r] = await exec(tab.id, initStage, [rect]);
-    console.log('[RegionShot] 滚动环境', r?.result);
+    await chrome.debugger.attach(target, '1.3');
   } catch (e) {
-    console.warn('[RegionShot] 初始化滚动失败', e);
+    console.warn('[RegionShot] 无法附加调试器（该标签可能已被 DevTools 占用）', e);
     setBadge(tab.id, '!', '#dc2626');
     return;
   }
 
-  // 3) 逐屏截图 + 在 background 内拼接
-  let stage = new OffscreenCanvas(outW, outH);
-  let ctx = stage.getContext('2d');
-  let y = 0;
-  let keepHeight = outH;
-  let frames = 0;
-
   try {
-    for (let i = 0; i < MAX_FRAMES; i++) {
-      setBadge(tab.id, String(i + 1));
-
-      const shot = await captureVisibleTabRetry(tab.windowId);
-      const frame = await drawOneFrame(ctx, stage, shot, rect, keepHeight, y);
-      if (!frame) {
-        console.warn('[RegionShot] 第', i + 1, '帧绘制失败');
-        break;
-      }
-
-      stage = frame.stage;
-      ctx = frame.ctx;
-      y = frame.y;
-      frames++;
-
-      const [stepRes] = await exec(tab.id, scrollStep, [rect]);
-      const step = stepRes?.result;
-      console.log('[RegionShot] 第', i + 1, '屏', step);
-
-      if (!step || step.moved <= 0 || step.atBottom) break;
-
-      keepHeight = Math.round(step.moved * dpr);
-      await sleep(CAPTURE_INTERVAL_MS);
-    }
+    await captureWithCdp(tab, target, rect);
   } catch (e) {
-    console.warn('[RegionShot] 截图循环中断', e);
+    console.error('[RegionShot] CDP 截图失败', e);
     setBadge(tab.id, '!', '#dc2626');
+  } finally {
+    try {
+      await chrome.debugger.detach(target);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+async function captureWithCdp(tab, target, rect) {
+  const metrics = await chrome.debugger.sendCommand(target, 'Page.getLayoutMetrics');
+  const content = metrics.cssContentSize || metrics.contentSize;
+  const vv = metrics.cssVisualViewport || metrics.visualViewport || {};
+  const pageY = vv.pageY || 0;
+  const pageX = vv.pageX || 0;
+
+  const dpr = rect.dpr || 1;
+  const startY = Math.max(0, pageY + rect.y); // 选区顶部在文档中的坐标
+  const docH = content.height || 0;
+  const avail = Math.max(0, docH - startY);
+  const totalH = Math.min(avail, MAX_TOTAL_DEVICE / dpr);
+
+  console.log('[RegionShot] 文档', { docH, pageY, startY, avail, totalH, dpr });
+
+  if (totalH <= 1) {
+    console.warn('[RegionShot] 选区下方没有可截取内容（页面可能不足一屏）');
+    setBadge(tab.id, '!', '#dc2626');
+    return;
   }
 
-  // 4) 恢复页面滚动位置
-  try {
-    await exec(tab.id, restoreScroll);
-  } catch {
-    /* ignore */
+  const segCssH = Math.max(200, Math.floor(MAX_SEGMENT_DEVICE / dpr));
+  const segCount = Math.ceil(totalH / segCssH);
+
+  let stage = null;
+  let ctx = null;
+  let y = 0;
+
+  for (let i = 0; i < segCount; i++) {
+    const offset = i * segCssH;
+    const h = Math.min(segCssH, totalH - offset);
+    setBadge(tab.id, `${i + 1}/${segCount}`);
+
+    const shot = await chrome.debugger.sendCommand(target, 'Page.captureScreenshot', {
+      format: 'png',
+      captureBeyondViewport: true,
+      clip: {
+        x: pageX + rect.x,
+        y: startY + offset,
+        width: rect.w,
+        height: h,
+        scale: 1,
+      },
+    });
+
+    const bitmap = await createImageBitmap(
+      dataUrlToBlob('data:image/png;base64,' + shot.data)
+    );
+
+    if (!stage) {
+      // 用第一段返回的像素高度推算总高度，兼容不同 deviceScaleFactor
+      const scaleY = bitmap.height / h;
+      const totalPx = Math.ceil(totalH * scaleY);
+      stage = new OffscreenCanvas(bitmap.width, Math.min(totalPx, MAX_TOTAL_DEVICE));
+      ctx = stage.getContext('2d');
+    }
+
+    try {
+      const drawH = Math.min(bitmap.height, stage.height - y);
+      if (drawH <= 0) break;
+      ctx.drawImage(bitmap, 0, 0, bitmap.width, drawH, 0, y, bitmap.width, drawH);
+      y += drawH;
+      if (drawH < bitmap.height) break; // 达到画布上限
+    } finally {
+      bitmap.close();
+    }
   }
 
-  if (frames === 0 || y <= 0) {
+  if (!stage || y <= 0) {
     console.warn('[RegionShot] 没有可保存的内容');
     setBadge(tab.id, '!', '#dc2626');
     return;
   }
 
-  // 5) 导出并保存
-  const blob = await stage.convertToBlob({ type: 'image/png' });
-  const filename = `region-${stamp()}.png`;
-  const dataUrl = await blobToDataUrl(blob);
+  // 裁掉画布底部多余部分
+  let finalCanvas = stage;
+  if (y < stage.height) {
+    finalCanvas = new OffscreenCanvas(stage.width, y);
+    finalCanvas.getContext('2d').drawImage(stage, 0, 0);
+  }
 
+  const blob = await finalCanvas.convertToBlob({ type: 'image/png' });
+  const dataUrl = await blobToDataUrl(blob);
+  await saveWithFallback(tab, dataUrl, `region-${stamp()}.png`);
+}
+
+async function saveWithFallback(tab, dataUrl, filename) {
   let saved = false;
 
-  // 先试 downloads API；data URL 过长时它会抛错，再退回页面内 blob 下载
+  // 先试 downloads API；data URL 过长时它会抛错
   try {
     await chrome.downloads.download({ url: dataUrl, filename, saveAs: false });
     saved = true;
@@ -164,20 +205,6 @@ function setBadge(tabId, text, color) {
   }
 }
 
-async function captureVisibleTabRetry(windowId) {
-  let lastErr;
-  for (let i = 0; i < 3; i++) {
-    try {
-      return await chrome.tabs.captureVisibleTab(windowId, { format: 'png' });
-    } catch (e) {
-      lastErr = e;
-      await sleep(700);
-    }
-  }
-  throw lastErr;
-}
-
-// data URL 手动解码，避免 service worker 里 fetch(data:) 的不确定性
 function dataUrlToBlob(dataUrl) {
   const comma = dataUrl.indexOf(',');
   const head = dataUrl.slice(0, comma);
@@ -189,57 +216,6 @@ function dataUrlToBlob(dataUrl) {
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   return new Blob([bytes], { type: mime });
-}
-
-async function drawOneFrame(ctx, stage, dataUrl, rect, keepHeight, y) {
-  let bitmap;
-  try {
-    bitmap = await createImageBitmap(dataUrlToBlob(dataUrl));
-  } catch (e) {
-    console.warn('[RegionShot] 解码截图失败', e);
-    return null;
-  }
-
-  try {
-    const dpr = rect.dpr || 1;
-    const sx = Math.max(0, Math.round(rect.x * dpr));
-    const sy = Math.max(0, Math.round(rect.y * dpr));
-    const availW = Math.max(0, bitmap.width - sx);
-    const availH = Math.max(0, bitmap.height - sy);
-    const drawW = Math.min(Math.round(rect.w * dpr), availW);
-    const fullH = Math.min(Math.round(rect.h * dpr), availH);
-    const keep = Math.min(keepHeight, fullH);
-
-    if (drawW <= 0 || keep <= 0) {
-      console.warn('[RegionShot] 选区超出截图范围', { sx, sy, availW, availH, drawW, keep });
-      return null;
-    }
-
-    const need = y + keep;
-    if (need > MAX_STAGE_HEIGHT) {
-      console.warn('[RegionShot] 达到画布高度上限', MAX_STAGE_HEIGHT);
-      return null;
-    }
-
-    let s = stage;
-    let c = ctx;
-
-    if (need > s.height) {
-      const next = new OffscreenCanvas(
-        s.width,
-        Math.min(MAX_STAGE_HEIGHT, Math.max(need, s.height * 2))
-      );
-      next.getContext('2d').drawImage(s, 0, 0);
-      s = next;
-      c = s.getContext('2d');
-    }
-
-    // 每帧只取底部 keep 高度，避免与上一帧重叠
-    c.drawImage(bitmap, sx, sy + fullH - keep, drawW, keep, 0, y, drawW, keep);
-    return { stage: s, ctx: c, y: y + keep };
-  } finally {
-    bitmap.close();
-  }
 }
 
 async function blobToDataUrl(blob) {
@@ -299,7 +275,7 @@ function selectionOverlay() {
     ].join(';');
 
     const tip = document.createElement('div');
-    tip.textContent = '拖拽选择区域 · 松手后自动向下滚动拼接 · Esc 取消';
+    tip.textContent = '拖拽选择宽度和起点 · 松手后自动截取到页面底部 · Esc 取消';
     tip.style.cssText = [
       'position:fixed',
       'z-index:2147483647',
@@ -365,7 +341,7 @@ function selectionOverlay() {
       });
     };
 
-    // 选区阶段拦住滚轮/触摸板滑动，否则页面会滚走、鼠标坐标和画面错位
+    // 选区阶段拦住滚轮/触摸板滑动，避免坐标错位
     const onWheel = (e) => {
       e.preventDefault();
     };
@@ -391,10 +367,17 @@ function selectionOverlay() {
       const w = Math.abs(e.clientX - sx);
       const h = Math.abs(e.clientY - sy);
 
-      if (w < 4 || h < 4) {
+      if (w < 4) {
         finish(null);
         return;
       }
+
+      // 高度只用来确定起点，实际会一直截到页面底部；太薄视为误触
+      if (h < 4) {
+        finish(null);
+        return;
+      }
+
       finish({ x, y, w, h, dpr });
     };
 
@@ -417,119 +400,7 @@ function selectionOverlay() {
   });
 }
 
-function initStage(rect) {
-  document.getElementById('__region_shot_stage__')?.remove();
-  document.querySelector('[data-region-shot-scroll="1"]')?.removeAttribute('data-region-shot-scroll');
-  delete document.documentElement.dataset.rsInitWindowY;
-  delete document.documentElement.dataset.rsInitTargetY;
-
-  const se = document.scrollingElement || document.documentElement;
-  const pageScrollable = se.scrollHeight > se.clientHeight + 2;
-
-  // 记录页面的初始滚动位置
-  document.documentElement.dataset.rsInitWindowY = String(se.scrollTop);
-
-  // 优先用页面滚动；只有页面本身不可滚时，才找选区内最近的可滚动祖先
-  if (!pageScrollable) {
-    const cx = Math.min(window.innerWidth - 1, Math.max(0, rect.x + rect.w / 2));
-    const cy = Math.min(window.innerHeight - 1, Math.max(0, rect.y + rect.h / 2));
-    let el = document.elementFromPoint(cx, cy);
-
-    while (el && el !== document.documentElement && el !== document.body) {
-      const st = getComputedStyle(el);
-      if (/(auto|scroll)/.test(st.overflowY) && el.scrollHeight > el.clientHeight + 2) {
-        el.setAttribute('data-region-shot-scroll', '1');
-        document.documentElement.dataset.rsInitTargetY = String(el.scrollTop);
-        break;
-      }
-      el = el.parentElement;
-    }
-  }
-
-  // 兜底：有的页面是 html 不可滚、body 自己 overflow:auto，上面的遍历会跳过 body
-  if (!document.querySelector('[data-region-shot-scroll="1"]') && document.body) {
-    const bs = getComputedStyle(document.body);
-    if (
-      /(auto|scroll)/.test(bs.overflowY) &&
-      document.body.scrollHeight > document.body.clientHeight + 2
-    ) {
-      document.body.setAttribute('data-region-shot-scroll', '1');
-      document.documentElement.dataset.rsInitTargetY = String(document.body.scrollTop);
-    }
-  }
-
-  const target = document.querySelector('[data-region-shot-scroll="1"]');
-  return {
-    mode: target ? 'element' : 'window',
-    pageScrollable,
-    scrollTop: se.scrollTop,
-    scrollHeight: se.scrollHeight,
-    viewportHeight: se.clientHeight,
-  };
-}
-
-function scrollStep(rect) {
-  const h = rect.h;
-  const target = document.querySelector('[data-region-shot-scroll="1"]');
-  const html = document.documentElement;
-  const prevHtmlBehavior = html.style.scrollBehavior;
-  const prevTargetBehavior = target ? target.style.scrollBehavior : '';
-
-  // 临时关闭平滑滚动，保证截图时已经到位
-  html.style.scrollBehavior = 'auto';
-  if (target) target.style.scrollBehavior = 'auto';
-
-  let before;
-  let after;
-  let maxScroll;
-  let mode;
-
-  if (target) {
-    mode = 'element';
-    before = target.scrollTop;
-    target.scrollTop = before + h;
-    after = target.scrollTop;
-    maxScroll = Math.max(0, target.scrollHeight - target.clientHeight);
-  } else {
-    mode = 'window';
-    const se = document.scrollingElement || html;
-    before = se.scrollTop;
-    se.scrollTop = before + h;
-    after = se.scrollTop;
-    maxScroll = Math.max(0, se.scrollHeight - se.clientHeight);
-  }
-
-  html.style.scrollBehavior = prevHtmlBehavior;
-  if (target) target.style.scrollBehavior = prevTargetBehavior;
-
-  return {
-    moved: Math.max(0, after - before),
-    atBottom: after >= maxScroll - 1,
-    mode,
-    scrollTop: after,
-    maxScroll,
-  };
-}
-
-function restoreScroll() {
-  const docEl = document.documentElement;
-  const se = document.scrollingElement || docEl;
-  const initY = parseFloat(docEl.dataset.rsInitWindowY || '');
-  if (!Number.isNaN(initY)) se.scrollTop = initY;
-
-  const target = document.querySelector('[data-region-shot-scroll="1"]');
-  const initTargetY = parseFloat(docEl.dataset.rsInitTargetY || '');
-  if (target) {
-    if (!Number.isNaN(initTargetY)) target.scrollTop = initTargetY;
-    target.removeAttribute('data-region-shot-scroll');
-  }
-
-  delete docEl.dataset.rsInitWindowY;
-  delete docEl.dataset.rsInitTargetY;
-  return true;
-}
-
-// 兜底下载：downloads API 对过长的 data URL 会失败，改在页面里用 blob URL 触发下载
+// 兜底下载：在页面里用 blob URL 触发下载，绕开 downloads API 对超长 data URL 的限制
 async function saveImage(dataUrl, filename) {
   try {
     const res = await fetch(dataUrl);
