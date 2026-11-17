@@ -276,7 +276,7 @@ function selectionOverlay() {
     ].join(';');
 
     const tip = document.createElement('div');
-    tip.textContent = '拖拽选择 · 拖到上下边缘自动滚动 · 松手完成 · Esc 取消';
+    tip.textContent = '第一步：拖拽确定起点和宽度';
     tip.style.cssText = [
       'position:fixed',
       'z-index:2147483647',
@@ -295,33 +295,50 @@ function selectionOverlay() {
     document.documentElement.append(root, box, tip);
     if (document.body) document.body.style.cursor = 'crosshair';
 
+    // 0 = 待机, 1 = 拖拽中, 2 = 调整结束位置
+    let phase = 0;
     let startPageX = 0;
     let startPageY = 0;
-    let dragging = false;
+    let fixedWidth = 0;
     let lastClientX = 0;
     let lastClientY = 0;
+    let current = { x: 0, y: 0, w: 0, h: 0 };
     let autoTimer = null;
 
-    const rectFrom = (clientX, clientY) => {
+    const paint = () => {
+      Object.assign(box.style, {
+        display: 'block',
+        left: `${current.x}px`,
+        top: `${current.y}px`,
+        width: `${current.w}px`,
+        height: `${current.h}px`,
+      });
+    };
+
+    const updateDragging = (clientX, clientY) => {
       const curPageX = clientX + window.scrollX;
       const curPageY = clientY + window.scrollY;
-      return {
+      current = {
         x: Math.min(startPageX, curPageX),
         y: Math.min(startPageY, curPageY),
         w: Math.abs(curPageX - startPageX),
         h: Math.abs(curPageY - startPageY),
       };
+      paint();
     };
 
-    const paint = (clientX, clientY) => {
-      const r = rectFrom(clientX, clientY);
-      Object.assign(box.style, {
-        display: 'block',
-        left: `${r.x}px`,
-        top: `${r.y}px`,
-        width: `${r.w}px`,
-        height: `${r.h}px`,
-      });
+    // 第二阶段：x 和顶部固定，底部跟随鼠标在文档中的位置（滚动手不动也会延伸）
+    const updateAdjusting = (clientY) => {
+      const bottomPageY = clientY + window.scrollY;
+      const top = Math.min(startPageY, bottomPageY);
+      const bottom = Math.max(startPageY, bottomPageY);
+      current = {
+        x: startPageX,
+        y: top,
+        w: fixedWidth,
+        h: bottom - top,
+      };
+      paint();
     };
 
     const stopAuto = () => {
@@ -331,7 +348,7 @@ function selectionOverlay() {
       }
     };
 
-    // 拖到视口上下边缘时自动滚动，让选区可以跨越多屏
+    // 拖到视口上下边缘时自动滚动（第一阶段用）
     const edgeScroll = (clientY) => {
       const EDGE = 60;
       const vh = window.innerHeight;
@@ -351,7 +368,7 @@ function selectionOverlay() {
       if (!autoTimer) {
         autoTimer = setInterval(() => {
           window.scrollBy(0, dy);
-          if (dragging) paint(lastClientX, lastClientY);
+          if (phase === 1) updateDragging(lastClientX, lastClientY);
         }, 16);
       }
     };
@@ -388,39 +405,63 @@ function selectionOverlay() {
     const onDown = (e) => {
       if (e.button !== 0) return;
       e.preventDefault();
-      dragging = true;
+
+      // 第二阶段：点击即确认
+      if (phase === 2) {
+        if (current.w >= 4 && current.h >= 4) {
+          finish({ x: current.x, y: current.y, w: current.w, h: current.h, dpr });
+        } else {
+          finish(null);
+        }
+        return;
+      }
+
+      if (phase !== 0) return;
+
+      phase = 1;
       startPageX = e.clientX + window.scrollX;
       startPageY = e.clientY + window.scrollY;
       lastClientX = e.clientX;
       lastClientY = e.clientY;
-      paint(e.clientX, e.clientY);
+      current = { x: startPageX, y: startPageY, w: 0, h: 0 };
+      paint();
     };
 
     const onMove = (e) => {
-      if (!dragging) return;
       lastClientX = e.clientX;
       lastClientY = e.clientY;
-      paint(e.clientX, e.clientY);
-      edgeScroll(e.clientY);
+
+      if (phase === 1) {
+        updateDragging(e.clientX, e.clientY);
+        edgeScroll(e.clientY);
+      } else if (phase === 2) {
+        updateAdjusting(e.clientY);
+      }
     };
 
-    // 用户自己滚动（滚轮/触摸板）时，选区框也要跟着更新
+    // 第二阶段允许正常滚动，选框随滚动延伸
     const onScroll = () => {
-      if (!dragging) return;
-      paint(lastClientX, lastClientY);
+      if (phase === 1) updateDragging(lastClientX, lastClientY);
+      else if (phase === 2) updateAdjusting(lastClientY);
     };
 
     const onUp = (e) => {
-      if (!dragging) return;
-      dragging = false;
+      if (phase !== 1) return;
       stopAuto();
+      updateDragging(e.clientX, e.clientY);
 
-      const r = rectFrom(e.clientX, e.clientY);
-      if (r.w < 4 || r.h < 4) {
+      if (current.w < 4 || current.h < 4) {
         finish(null);
         return;
       }
-      finish({ x: r.x, y: r.y, w: r.w, h: r.h, dpr });
+
+      // 进入第二阶段：宽度和起点固定，底部随鼠标/滚动延伸
+      phase = 2;
+      fixedWidth = current.w;
+      startPageX = current.x;
+      startPageY = current.y;
+      box.style.borderColor = '#10b981';
+      tip.textContent = '第二步：两指滚动到结束位置，点击页面确认 · Esc 取消';
     };
 
     const onContext = (e) => {
@@ -429,7 +470,7 @@ function selectionOverlay() {
     };
 
     const onBlur = () => {
-      if (dragging) finish(null);
+      if (phase === 1) finish(null);
     };
 
     document.addEventListener('keydown', onKey, true);

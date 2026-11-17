@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Region Shot · 区域截图",
-  "version": "1.3.0",
-  "description": "在网页上拖拽框选任意范围，拖到边缘可自动滚动，选多长截多长，保存为 PNG。",
+  "version": "1.4.0",
+  "description": "拖拽定起点，滚动到结束位置点击确认，截取任意范围并保存为 PNG。",
   "minimum_chrome_version": "110",
   "permissions": ["activeTab", "scripting", "downloads", "debugger"],
   "action": {
