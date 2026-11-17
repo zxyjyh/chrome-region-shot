@@ -260,7 +260,6 @@ function selectionOverlay() {
       'background:rgba(0,0,0,0.18)',
       'user-select:none',
       '-webkit-user-select:none',
-      'touch-action:none',
     ].join(';');
 
     // 选区框用 absolute + 文档坐标：页面滚动时框跟着内容走，不会错位
@@ -382,6 +381,7 @@ function selectionOverlay() {
       document.removeEventListener('keydown', onKey, true);
       root.removeEventListener('mousedown', onDown);
       root.removeEventListener('contextmenu', onContext);
+      root.removeEventListener('wheel', onWheel, { passive: false });
       window.removeEventListener('mousemove', onMove, true);
       window.removeEventListener('mouseup', onUp, true);
       window.removeEventListener('blur', onBlur);
@@ -439,6 +439,51 @@ function selectionOverlay() {
       }
     };
 
+    // 第二阶段手动接管滚动：全屏遮罩会吃掉浏览器默认的 wheel 滚动
+    const onWheel = (e) => {
+      if (phase !== 2) return;
+      e.preventDefault();
+
+      let dy = e.deltaY;
+      if (e.deltaMode === 1) dy *= 16;
+      else if (e.deltaMode === 2) dy *= window.innerHeight;
+
+      const html = document.documentElement;
+      const prevBehavior = html.style.scrollBehavior;
+      html.style.scrollBehavior = 'auto';
+
+      const se = document.scrollingElement || html;
+      const before = se.scrollTop;
+      se.scrollTop = before + dy;
+
+      // 页面本身不可滚时，找鼠标下方的内部滚动容器
+      if (Math.abs(se.scrollTop - before) < 0.5) {
+        const prevPE = root.style.pointerEvents;
+        root.style.pointerEvents = 'none';
+        const chain = [];
+        let el = document.elementFromPoint(e.clientX, e.clientY);
+        while (el && el !== document.documentElement) {
+          chain.push(el);
+          el = el.parentElement;
+        }
+        root.style.pointerEvents = prevPE;
+
+        for (const node of chain) {
+          const st = getComputedStyle(node);
+          if (/(auto|scroll)/.test(st.overflowY) && node.scrollHeight > node.clientHeight + 2) {
+            node.scrollTop += dy;
+            break;
+          }
+        }
+      }
+
+      html.style.scrollBehavior = prevBehavior;
+
+      lastClientX = e.clientX;
+      lastClientY = e.clientY;
+      updateAdjusting(lastClientY);
+    };
+
     // 第二阶段允许正常滚动，选框随滚动延伸
     const onScroll = () => {
       if (phase === 1) updateDragging(lastClientX, lastClientY);
@@ -476,6 +521,7 @@ function selectionOverlay() {
     document.addEventListener('keydown', onKey, true);
     root.addEventListener('mousedown', onDown);
     root.addEventListener('contextmenu', onContext);
+    root.addEventListener('wheel', onWheel, { passive: false });
     window.addEventListener('mousemove', onMove, true);
     window.addEventListener('mouseup', onUp, true);
     window.addEventListener('blur', onBlur);
