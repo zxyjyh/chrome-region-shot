@@ -303,6 +303,7 @@ function selectionOverlay() {
     let lastClientY = 0;
     let current = { x: 0, y: 0, w: 0, h: 0 };
     let autoTimer = null;
+    let confirmBtn = null;
 
     const paint = () => {
       Object.assign(box.style, {
@@ -381,7 +382,11 @@ function selectionOverlay() {
       document.removeEventListener('keydown', onKey, true);
       root.removeEventListener('mousedown', onDown);
       root.removeEventListener('contextmenu', onContext);
-      document.removeEventListener('mousedown', onConfirm, true);
+      document.removeEventListener('click', onConfirm, true);
+      if (confirmBtn) {
+        confirmBtn.remove();
+        confirmBtn = null;
+      }
       window.removeEventListener('mousemove', onMove, true);
       window.removeEventListener('mouseup', onUp, true);
       window.removeEventListener('blur', onBlur);
@@ -439,17 +444,22 @@ function selectionOverlay() {
       }
     };
 
-    // 第二阶段点击任意位置确认（此时遮罩已不拦截事件）
-    const onConfirm = (e) => {
-      if (phase !== 2) return;
-      e.preventDefault();
-      e.stopPropagation();
+    const doConfirm = () => {
+      if (settled) return;
 
       if (current.w >= 4 && current.h >= 4) {
         finish({ x: current.x, y: current.y, w: current.w, h: current.h, dpr });
       } else {
         finish(null);
       }
+    };
+
+    // 第二阶段点击任意位置确认（此时遮罩已不拦截事件）
+    const onConfirm = (e) => {
+      if (phase !== 2) return;
+      e.preventDefault();
+      e.stopPropagation();
+      doConfirm();
     };
 
     // 第二阶段允许正常滚动，选框随滚动延伸
@@ -474,11 +484,37 @@ function selectionOverlay() {
       startPageX = current.x;
       startPageY = current.y;
       box.style.borderColor = '#10b981';
-      tip.textContent = '第二步：滚动到结束位置，点击页面确认 · Esc 取消';
+      tip.textContent = '第二步：滚动到结束位置，点击页面或右下角按钮确认 · Esc 取消';
 
       // 让遮罩不再拦截事件，把滚动和悬停完全交还给浏览器
       root.style.pointerEvents = 'none';
-      document.addEventListener('mousedown', onConfirm, true);
+      document.addEventListener('click', onConfirm, true);
+
+      // 显式按钮兜底，避免页面里某些元素吞掉点击
+      confirmBtn = document.createElement('div');
+      confirmBtn.textContent = '✓ 完成截图';
+      confirmBtn.style.cssText = [
+        'position:fixed',
+        'right:24px',
+        'bottom:24px',
+        'z-index:2147483647',
+        'padding:10px 18px',
+        'background:#10b981',
+        'color:#fff',
+        'font:14px/1.4 -apple-system,BlinkMacSystemFont,sans-serif',
+        'border-radius:8px',
+        'cursor:pointer',
+        'box-shadow:0 4px 16px rgba(0,0,0,.25)',
+        'pointer-events:auto',
+        'user-select:none',
+        '-webkit-user-select:none',
+      ].join(';');
+      confirmBtn.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        doConfirm();
+      });
+      document.documentElement.appendChild(confirmBtn);
     };
 
     const onContext = (e) => {
