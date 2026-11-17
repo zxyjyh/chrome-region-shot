@@ -68,20 +68,20 @@ async function runCapture(tab) {
 async function captureWithCdp(tab, target, rect) {
   const metrics = await chrome.debugger.sendCommand(target, 'Page.getLayoutMetrics');
   const content = metrics.cssContentSize || metrics.contentSize;
-  const vv = metrics.cssVisualViewport || metrics.visualViewport || {};
-  const pageY = vv.pageY || 0;
-  const pageX = vv.pageX || 0;
 
   const dpr = rect.dpr || 1;
-  const startY = Math.max(0, pageY + rect.y); // 选区顶部在文档中的坐标
   const docH = content.height || 0;
-  const avail = Math.max(0, docH - startY);
-  const totalH = Math.min(avail, MAX_TOTAL_DEVICE / dpr);
+  const docW = content.width || 0;
 
-  console.log('[RegionShot] 文档', { docH, pageY, startY, avail, totalH, dpr });
+  // rect 已经是文档坐标（选区框随页面滚动），这里只做边界收敛
+  const startX = Math.max(0, Math.min(rect.x, docW));
+  const startY = Math.max(0, Math.min(rect.y, docH));
+  const totalH = Math.min(rect.h, docH - startY, MAX_TOTAL_DEVICE / dpr);
+
+  console.log('[RegionShot] 文档', { docH, docW, startX, startY, totalH, dpr });
 
   if (totalH <= 1) {
-    console.warn('[RegionShot] 选区下方没有可截取内容（页面可能不足一屏）');
+    console.warn('[RegionShot] 选区没有有效高度');
     setBadge(tab.id, '!', '#dc2626');
     return;
   }
@@ -102,7 +102,7 @@ async function captureWithCdp(tab, target, rect) {
       format: 'png',
       captureBeyondViewport: true,
       clip: {
-        x: pageX + rect.x,
+        x: startX,
         y: startY + offset,
         width: rect.w,
         height: h,
@@ -263,9 +263,10 @@ function selectionOverlay() {
       'touch-action:none',
     ].join(';');
 
+    // 选区框用 absolute + 文档坐标：页面滚动时框跟着内容走，不会错位
     const box = document.createElement('div');
     box.style.cssText = [
-      'position:fixed',
+      'position:absolute',
       'z-index:2147483647',
       'border:2px solid #3b82f6',
       'background:rgba(59,130,246,0.15)',
@@ -275,7 +276,7 @@ function selectionOverlay() {
     ].join(';');
 
     const tip = document.createElement('div');
-    tip.textContent = '拖拽选择宽度和起点 · 松手后自动截取到页面底部 · Esc 取消';
+    tip.textContent = '拖拽选择 · 拖到上下边缘自动滚动 · 松手完成 · Esc 取消';
     tip.style.cssText = [
       'position:fixed',
       'z-index:2147483647',
@@ -294,11 +295,69 @@ function selectionOverlay() {
     document.documentElement.append(root, box, tip);
     if (document.body) document.body.style.cursor = 'crosshair';
 
-    let sx = 0;
-    let sy = 0;
+    let startPageX = 0;
+    let startPageY = 0;
     let dragging = false;
+    let lastClientX = 0;
+    let lastClientY = 0;
+    let autoTimer = null;
+
+    const rectFrom = (clientX, clientY) => {
+      const curPageX = clientX + window.scrollX;
+      const curPageY = clientY + window.scrollY;
+      return {
+        x: Math.min(startPageX, curPageX),
+        y: Math.min(startPageY, curPageY),
+        w: Math.abs(curPageX - startPageX),
+        h: Math.abs(curPageY - startPageY),
+      };
+    };
+
+    const paint = (clientX, clientY) => {
+      const r = rectFrom(clientX, clientY);
+      Object.assign(box.style, {
+        display: 'block',
+        left: `${r.x}px`,
+        top: `${r.y}px`,
+        width: `${r.w}px`,
+        height: `${r.h}px`,
+      });
+    };
+
+    const stopAuto = () => {
+      if (autoTimer) {
+        clearInterval(autoTimer);
+        autoTimer = null;
+      }
+    };
+
+    // 拖到视口上下边缘时自动滚动，让选区可以跨越多屏
+    const edgeScroll = (clientY) => {
+      const EDGE = 60;
+      const vh = window.innerHeight;
+      let dy = 0;
+
+      if (clientY > vh - EDGE) {
+        dy = Math.max(4, Math.round((clientY - (vh - EDGE)) / 4));
+      } else if (clientY < EDGE) {
+        dy = -Math.max(4, Math.round((EDGE - clientY) / 4));
+      }
+
+      if (dy === 0) {
+        stopAuto();
+        return;
+      }
+
+      if (!autoTimer) {
+        autoTimer = setInterval(() => {
+          window.scrollBy(0, dy);
+          if (dragging) paint(lastClientX, lastClientY);
+        }, 16);
+      }
+    };
 
     const cleanup = () => {
+      stopAuto();
       root.remove();
       box.remove();
       tip.remove();
@@ -306,10 +365,10 @@ function selectionOverlay() {
       document.removeEventListener('keydown', onKey, true);
       root.removeEventListener('mousedown', onDown);
       root.removeEventListener('contextmenu', onContext);
-      root.removeEventListener('wheel', onWheel, { passive: false });
       window.removeEventListener('mousemove', onMove, true);
       window.removeEventListener('mouseup', onUp, true);
       window.removeEventListener('blur', onBlur);
+      window.removeEventListener('scroll', onScroll, true);
     };
 
     const finish = (result) => {
@@ -330,55 +389,38 @@ function selectionOverlay() {
       if (e.button !== 0) return;
       e.preventDefault();
       dragging = true;
-      sx = e.clientX;
-      sy = e.clientY;
-      Object.assign(box.style, {
-        display: 'block',
-        left: `${sx}px`,
-        top: `${sy}px`,
-        width: '0px',
-        height: '0px',
-      });
-    };
-
-    // 选区阶段拦住滚轮/触摸板滑动，避免坐标错位
-    const onWheel = (e) => {
-      e.preventDefault();
+      startPageX = e.clientX + window.scrollX;
+      startPageY = e.clientY + window.scrollY;
+      lastClientX = e.clientX;
+      lastClientY = e.clientY;
+      paint(e.clientX, e.clientY);
     };
 
     const onMove = (e) => {
       if (!dragging) return;
-      const x = Math.min(sx, e.clientX);
-      const y = Math.min(sy, e.clientY);
-      Object.assign(box.style, {
-        left: `${x}px`,
-        top: `${y}px`,
-        width: `${Math.abs(e.clientX - sx)}px`,
-        height: `${Math.abs(e.clientY - sy)}px`,
-      });
+      lastClientX = e.clientX;
+      lastClientY = e.clientY;
+      paint(e.clientX, e.clientY);
+      edgeScroll(e.clientY);
+    };
+
+    // 用户自己滚动（滚轮/触摸板）时，选区框也要跟着更新
+    const onScroll = () => {
+      if (!dragging) return;
+      paint(lastClientX, lastClientY);
     };
 
     const onUp = (e) => {
       if (!dragging) return;
       dragging = false;
+      stopAuto();
 
-      const x = Math.min(sx, e.clientX);
-      const y = Math.min(sy, e.clientY);
-      const w = Math.abs(e.clientX - sx);
-      const h = Math.abs(e.clientY - sy);
-
-      if (w < 4) {
+      const r = rectFrom(e.clientX, e.clientY);
+      if (r.w < 4 || r.h < 4) {
         finish(null);
         return;
       }
-
-      // 高度只用来确定起点，实际会一直截到页面底部；太薄视为误触
-      if (h < 4) {
-        finish(null);
-        return;
-      }
-
-      finish({ x, y, w, h, dpr });
+      finish({ x: r.x, y: r.y, w: r.w, h: r.h, dpr });
     };
 
     const onContext = (e) => {
@@ -393,10 +435,10 @@ function selectionOverlay() {
     document.addEventListener('keydown', onKey, true);
     root.addEventListener('mousedown', onDown);
     root.addEventListener('contextmenu', onContext);
-    root.addEventListener('wheel', onWheel, { passive: false });
     window.addEventListener('mousemove', onMove, true);
     window.addEventListener('mouseup', onUp, true);
     window.addEventListener('blur', onBlur);
+    window.addEventListener('scroll', onScroll, true);
   });
 }
 
