@@ -381,7 +381,7 @@ function selectionOverlay() {
       document.removeEventListener('keydown', onKey, true);
       root.removeEventListener('mousedown', onDown);
       root.removeEventListener('contextmenu', onContext);
-      root.removeEventListener('wheel', onWheel, { passive: false });
+      document.removeEventListener('mousedown', onConfirm, true);
       window.removeEventListener('mousemove', onMove, true);
       window.removeEventListener('mouseup', onUp, true);
       window.removeEventListener('blur', onBlur);
@@ -439,49 +439,17 @@ function selectionOverlay() {
       }
     };
 
-    // 第二阶段手动接管滚动：全屏遮罩会吃掉浏览器默认的 wheel 滚动
-    const onWheel = (e) => {
+    // 第二阶段点击任意位置确认（此时遮罩已不拦截事件）
+    const onConfirm = (e) => {
       if (phase !== 2) return;
       e.preventDefault();
+      e.stopPropagation();
 
-      let dy = e.deltaY;
-      if (e.deltaMode === 1) dy *= 16;
-      else if (e.deltaMode === 2) dy *= window.innerHeight;
-
-      const html = document.documentElement;
-      const prevBehavior = html.style.scrollBehavior;
-      html.style.scrollBehavior = 'auto';
-
-      const se = document.scrollingElement || html;
-      const before = se.scrollTop;
-      se.scrollTop = before + dy;
-
-      // 页面本身不可滚时，找鼠标下方的内部滚动容器
-      if (Math.abs(se.scrollTop - before) < 0.5) {
-        const prevPE = root.style.pointerEvents;
-        root.style.pointerEvents = 'none';
-        const chain = [];
-        let el = document.elementFromPoint(e.clientX, e.clientY);
-        while (el && el !== document.documentElement) {
-          chain.push(el);
-          el = el.parentElement;
-        }
-        root.style.pointerEvents = prevPE;
-
-        for (const node of chain) {
-          const st = getComputedStyle(node);
-          if (/(auto|scroll)/.test(st.overflowY) && node.scrollHeight > node.clientHeight + 2) {
-            node.scrollTop += dy;
-            break;
-          }
-        }
+      if (current.w >= 4 && current.h >= 4) {
+        finish({ x: current.x, y: current.y, w: current.w, h: current.h, dpr });
+      } else {
+        finish(null);
       }
-
-      html.style.scrollBehavior = prevBehavior;
-
-      lastClientX = e.clientX;
-      lastClientY = e.clientY;
-      updateAdjusting(lastClientY);
     };
 
     // 第二阶段允许正常滚动，选框随滚动延伸
@@ -506,7 +474,11 @@ function selectionOverlay() {
       startPageX = current.x;
       startPageY = current.y;
       box.style.borderColor = '#10b981';
-      tip.textContent = '第二步：两指滚动到结束位置，点击页面确认 · Esc 取消';
+      tip.textContent = '第二步：滚动到结束位置，点击页面确认 · Esc 取消';
+
+      // 让遮罩不再拦截事件，把滚动和悬停完全交还给浏览器
+      root.style.pointerEvents = 'none';
+      document.addEventListener('mousedown', onConfirm, true);
     };
 
     const onContext = (e) => {
@@ -521,7 +493,6 @@ function selectionOverlay() {
     document.addEventListener('keydown', onKey, true);
     root.addEventListener('mousedown', onDown);
     root.addEventListener('contextmenu', onContext);
-    root.addEventListener('wheel', onWheel, { passive: false });
     window.addEventListener('mousemove', onMove, true);
     window.addEventListener('mouseup', onUp, true);
     window.addEventListener('blur', onBlur);
