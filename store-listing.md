@@ -53,7 +53,7 @@ Region Shot 让你先框出要的那一列，再滚到结束位置，把中间�
 3. 松开后，用触摸板或滚轮滚动到想结束的位置，选区框会跟着延伸——上下滚就纵向延伸，左右滚就横向延伸，选区右下角实时显示当前尺寸
 4. 点选区右下角的「✓ 完成截图」（或点页面任意位置）；按钮会跟着选区走，滚到哪里都点得到
 5. 截图完成后打开标注编辑器：加文字、箭头、矩形，可拖动、改颜色和字号，⌘Z 撤销
-6. 点「✓ 保存 PNG」存到下载文件夹
+6. 点「✓ 保存 PNG」存到下载文件夹，或点「复制图片」直接粘贴到微信 / 钉钉等任意应用
 
 框选阶段按 Esc 或点右键取消；编辑器里点「取消」或关掉标签页则不保存。
 
@@ -283,7 +283,7 @@ No account or credentials are required. Everything runs locally.
 3. In the middle of the article body, press the mouse and drag 200-300px horizontally, then release. A green selection outline appears and a "Done" button appears at the bottom right.
 4. Scroll down with the mouse wheel. The selection outline grows downward and the live dimension indicator updates.
 5. Click the "Done" button once the selection is several screens tall.
-6. The annotation editor opens in a new tab with the stitched image. Add some text, an arrow, or a rectangle, then click "Save PNG" (✓ 保存 PNG).
+6. The annotation editor opens in a new tab with the stitched image. Add some text, an arrow, or a rectangle, then click "Save PNG" (✓ 保存 PNG), or click "Copy image" to paste the result straight into any app.
 7. A PNG is saved to Downloads. It should contain exactly the region that was selected, with no header or sidebar that was outside the selection, and it should include the annotations you just drew at the same positions you placed them.
 
 Expected during steps 3-7: Chrome shows its standard "being debugged" infobar. It disappears automatically when the capture completes.

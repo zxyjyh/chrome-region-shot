@@ -107,7 +107,7 @@
   <tr><td>身份信息（姓名、邮箱、账号、手机号）</td><td>不处理。扩展不登录、不申请任何身份相关权限</td></tr>
   <tr><td>设备标识符、指纹</td><td>不处理</td></tr>
   <tr><td>地理位置</td><td>不处理</td></tr>
-  <tr><td>剪贴板</td><td>不处理</td></tr>
+  <tr><td>剪贴板</td><td>不读取。只有你主动点击「复制图片」时，扩展才会把刚生成的那张截图写入剪贴板；它从不读取剪贴板里已有的内容</td></tr>
   <tr><td>使用统计、崩溃报告、埋点</td><td>不存在。代码中没有任何分析 SDK 或统计上报</td></tr>
 </table>
 
@@ -121,6 +121,7 @@
   <li>如果标注编辑器没能打开（例如标签页创建失败），扩展会立即删除这条记录并改为直接保存原图——不会留下无人读取的副本。</li>
   <li>除此之外不使用任何持久化存储：没有 <code>chrome.storage</code>、<code>localStorage</code>、Cookie。标注内容（文字、箭头、矩形）只存在于编辑器页面的内存中，关闭页面即消失。</li>
   <li>最终生成的 PNG 文件保存在你自己的下载文件夹，由你自行决定保留、移动或删除。扩展不会再次读取它。</li>
+  <li>如果你使用「复制图片」，截图会进入系统剪贴板，由操作系统保管，直到被下一次复制覆盖；扩展不会读取剪贴板中的内容。剪贴板内容只会流向你自己粘贴到的应用。</li>
 </ul>
 
 <h2>5. 数据是否传输到外部</h2>
@@ -232,7 +233,7 @@ The use of information received from Google APIs will adhere to the Chrome Web S
   <tr><td>Identity information (name, email, account, phone)</td><td>No. There is no sign-in and no identity-related permission.</td></tr>
   <tr><td>Device identifiers or fingerprints</td><td>No.</td></tr>
   <tr><td>Location</td><td>No.</td></tr>
-  <tr><td>Clipboard</td><td>No.</td></tr>
+  <tr><td>Clipboard</td><td>Not read. The extension writes the screenshot you just generated to the clipboard only when you click "Copy image"; it never reads existing clipboard contents.</td></tr>
   <tr><td>Usage analytics, crash reports, telemetry</td><td>None. There is no analytics SDK and no reporting code of any kind.</td></tr>
 </table>
 
@@ -246,6 +247,7 @@ The use of information received from Google APIs will adhere to the Chrome Web S
   <li>If the annotation editor fails to open (for example, the tab cannot be created), the extension deletes the record immediately and saves the original image directly instead — no unread copy is left behind.</li>
   <li>No other persistent storage is used: no <code>chrome.storage</code>, no <code>localStorage</code>, no cookies. Annotations (text, arrows, rectangles) exist only in the editor page's memory and disappear when the page closes.</li>
   <li>The resulting PNG is saved to your own Downloads folder. You decide whether to keep, move, or delete it. The extension never reads it again.</li>
+  <li>If you use "Copy image", the screenshot is placed on the system clipboard by the operating system and stays there until overwritten by your next copy action. The extension never reads clipboard contents; the image only goes to whichever application you paste it into.</li>
 </ul>
 
 <h2>5. Transmission to external servers</h2>

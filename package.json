@@ -9,6 +9,7 @@
     "test": "node test/e2e.js",
     "test:visual": "node test/manual-check.js",
     "test:phase2": "node test/second-phase-check.js",
+    "test:clipboard": "node test/clipboard-check.js",
     "store:shots": "node scripts/store-shots.js"
   }
 }

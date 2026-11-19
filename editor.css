@@ -35,14 +35,14 @@ body {
   border-bottom: 1px solid var(--line);
 }
 
-/* 工具区窄窗口下自己横向滚动；「取消 / 保存」固定在右侧始终可见 */
+/* 工具区窄窗口下自己横向滚动；「取消 / 复制 / 保存」固定在右侧始终可见。
+   不能 wrap：一换行顶栏就会变高，把画布往下挤。 */
 .barScroll {
   display: flex;
   align-items: center;
   gap: 10px;
   flex: 1;
   min-width: 0;
-  flex-wrap: wrap;
   overflow-x: auto;
 }
 

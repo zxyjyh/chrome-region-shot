@@ -31,6 +31,7 @@ const sizeInput = document.getElementById('size');
 const sizeVal = document.getElementById('sizeVal');
 const zoomVal = document.getElementById('zoomVal');
 const saveBtn = document.getElementById('save');
+const copyBtn = document.getElementById('copy');
 const delBtn = document.getElementById('del');
 const undoBtn = document.getElementById('undo');
 
@@ -312,6 +313,7 @@ function bindUI() {
   undoBtn.addEventListener('click', undo);
   delBtn.addEventListener('click', deleteSelected);
   document.getElementById('save').addEventListener('click', save);
+  copyBtn.addEventListener('click', copyImage);
   document.getElementById('cancel').addEventListener('click', closeTab);
   document.getElementById('zoomIn').addEventListener('click', () => setZoom(zoom * 1.25));
   document.getElementById('zoomOut').addEventListener('click', () => setZoom(zoom / 1.25));
@@ -706,14 +708,8 @@ function buildPalette() {
 // 导出
 // ---------------------------------------------------------------------------
 
-async function save() {
-  if (!bmp) return;
-  if (editing) commitInput(false);
-
-  saveBtn.disabled = true;
-  saveBtn.textContent = '导出中…';
-
-  // 按原图尺寸重绘一遍：画布上的 selection 虚线、缩放都不进成品
+// 按原图尺寸重绘成品：画布上的 selection 虚线、缩放都不进成品
+async function composeBlob() {
   const canvas = document.createElement('canvas');
   canvas.width = bmp.width;
   canvas.height = bmp.height;
@@ -721,13 +717,21 @@ async function save() {
   ctx.drawImage(bmp, 0, 0);
   drawMarks(ctx, marks, false);
 
-  let blob = null;
   try {
-    blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+    return await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
   } catch {
-    /* 超大图可能直接抛 */
+    return null; // 超大图可能直接抛
   }
+}
 
+async function save() {
+  if (!bmp) return;
+  if (editing) commitInput(false);
+
+  saveBtn.disabled = true;
+  saveBtn.textContent = '导出中…';
+
+  const blob = await composeBlob();
   if (!blob) {
     saveBtn.disabled = false;
     saveBtn.textContent = '✓ 保存 PNG';
@@ -749,6 +753,41 @@ async function save() {
   saveBtn.disabled = false;
   saveBtn.textContent = '✓ 保存 PNG';
   fail('保存失败，请重试');
+}
+
+async function copyImage() {
+  if (!bmp) return;
+  if (editing) commitInput(false);
+
+  copyBtn.disabled = true;
+  copyBtn.textContent = '复制中…';
+
+  const blob = await composeBlob();
+  if (!blob) {
+    copyBtn.disabled = false;
+    copyBtn.textContent = '复制图片';
+    fail('导出失败：图片过大，浏览器无法编码为 PNG');
+    return;
+  }
+
+  try {
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+  } catch (e) {
+    console.warn('[RegionShot 标注] 复制到剪贴板失败', e);
+    copyBtn.disabled = false;
+    copyBtn.textContent = '复制图片';
+    fail('复制失败，请改用「✓ 保存 PNG」');
+    return;
+  }
+
+  // 不关标签页：用户接下来要去微信 / 钉钉里粘贴
+  statusEl.classList.remove('err');
+  hint.textContent = '已复制到剪贴板，去微信 / 钉钉里粘贴（⌘V / Ctrl+V）';
+  copyBtn.textContent = '✓ 已复制';
+  setTimeout(() => {
+    copyBtn.textContent = '复制图片';
+    copyBtn.disabled = false;
+  }, 2000);
 }
 
 async function download(blob, name) {
