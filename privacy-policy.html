@@ -75,7 +75,7 @@
 <main>
 
 <h1>隐私政策 — Region Shot · 区域截图</h1>
-<p class="meta">生效日期：2026 年 11 月 17 日　·　最后更新：2026 年 11 月 17 日</p>
+<p class="meta">生效日期：2026 年 11 月 17 日　·　最后更新：2026 年 11 月 19 日</p>
 
 <div class="lead">
   <p><strong>一句话：</strong>这个扩展只把你在网页上框选的那块区域，在你自己的电脑上拼成一张 PNG 图片，然后存到你的下载文件夹。</p>
@@ -125,7 +125,7 @@
 </ul>
 
 <h2>5. 数据是否传输到外部</h2>
-<p><strong>不传输。</strong>扩展代码中不存在任何向外部服务器发送数据的网络请求——没有 <code>fetch</code> 到远程地址、没有 <code>XMLHttpRequest</code>、没有 WebSocket、没有打点上报。（代码中唯一一处 <code>fetch</code> 调用，读取的是浏览器内存里的本地 <code>data:</code> URL，用于在下载接口失败时兜底保存文件，不产生任何网络流量。）</p>
+<p><strong>不传输。</strong>扩展代码中不存在任何向外部服务器发送数据的网络请求——没有 <code>fetch</code> 到远程地址、没有 <code>XMLHttpRequest</code>、没有 WebSocket、没有打点上报。（代码中共两处 <code>fetch</code> 调用：一处读取扩展包内的 <code>_locales</code> 语言文案 JSON，另一处读取浏览器内存里的本地 <code>data:</code> URL，用于在下载接口失败时兜底保存文件；两者都不产生任何网络流量。）</p>
 
 <h2>6. 数据共享与出售</h2>
 <p>不共享，不出售。扩展不包含任何第三方 SDK、广告组件、统计工具或外部分析服务。我们不会把数据转让给广告平台、数据经纪商或任何其他第三方。</p>
@@ -184,7 +184,7 @@
 
 <h2>12. 联系方式</h2>
 <p>关于本政策或扩展的数据处理有任何疑问，请联系：</p>
-<p><strong>[请替换为你的联系邮箱]</strong></p>
+<p><strong>xiaoyan.zhuxu@gmail.com</strong></p>
 <p>通常会在 7 个工作日内回复。</p>
 
 <h2>13. 合规声明</h2>
@@ -205,7 +205,7 @@ The use of information received from Google APIs will adhere to the Chrome Web S
 <p class="lang-split">English Version</p>
 
 <h1>Privacy Policy — Region Shot</h1>
-<p class="meta">Effective date: November 17, 2026　·　Last updated: November 17, 2026</p>
+<p class="meta">Effective date: November 17, 2026　·　Last updated: November 19, 2026</p>
 
 <div class="lead">
   <p><strong>In one sentence:</strong> this extension stitches the area you select on a web page into a single PNG image, on your own computer, and saves it to your Downloads folder.</p>
@@ -255,7 +255,7 @@ The use of information received from Google APIs will adhere to the Chrome Web S
 </ul>
 
 <h2>5. Transmission to external servers</h2>
-<p><strong>None.</strong> The extension contains no network requests that send data anywhere — no remote <code>fetch</code>, no <code>XMLHttpRequest</code>, no WebSocket, no telemetry endpoint. (The only <code>fetch</code> call in the code reads a local <code>data:</code> URL held in browser memory, used as a fallback for saving the file when the downloads API fails. It generates no network traffic.)</p>
+<p><strong>None.</strong> The extension contains no network requests that send data anywhere — no remote <code>fetch</code>, no <code>XMLHttpRequest</code>, no WebSocket, no telemetry endpoint. (There are two <code>fetch</code> calls in the code: one reads the bundled <code>_locales</code> language JSON from inside the extension package, the other reads a local <code>data:</code> URL held in browser memory as a fallback for saving the file when the downloads API fails. Neither generates any network traffic.)</p>
 
 <h2>6. Sharing and sale of data</h2>
 <p>Not shared, not sold. The extension contains no third-party SDKs, ad components, analytics tools, or external services. We do not transfer data to advertising platforms, data brokers, or any other third party.</p>
@@ -298,7 +298,7 @@ The use of information received from Google APIs will adhere to the Chrome Web S
 
 <h2>12. Contact</h2>
 <p>Questions about this policy or the extension's data handling:</p>
-<p><strong>[Replace with your contact email]</strong></p>
+<p><strong>xiaoyan.zhuxu@gmail.com</strong></p>
 <p>We aim to respond within 7 business days.</p>
 
 <h2>13. Compliance statement</h2>
