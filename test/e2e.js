@@ -97,9 +97,10 @@ function prepareExtension() {
   }
 
   // 标注编辑器（截图完成后打开的那个扩展页面）
-  for (const f of ['editor.html', 'editor.css', 'editor.js']) {
+  for (const f of ['editor.html', 'editor.css', 'editor.js', 'i18n.js']) {
     fs.copyFileSync(path.join(ROOT, f), path.join(EXT, f));
   }
+  fs.cpSync(path.join(ROOT, '_locales'), path.join(EXT, '_locales'), { recursive: true });
 
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.json'), 'utf8'));
   manifest.host_permissions = ['<all_urls>'];
@@ -213,6 +214,16 @@ async function runCase(page, dpr) {
   const y0 = Math.round(geom.top + 40);
   const y1 = Math.round(geom.top + Math.min(340, geom.h - 20));
   const x0 = 100, x1 = 600;
+  // 第二阶段滚动后选区下边界贴住视口底部，图片高度 = 结束滚动位置 + 视口高度 - 选区上边缘
+  const topContentY = page === 'window-scroll.html' ? y0 : y0 - geom.top;
+  const clientH = await evalPage(`(() => {
+    if ('${page}' === 'inner-scroll.html') return document.getElementById('scroller').clientHeight;
+    if ('${page}' === 'iframe-scroll.html') {
+      const d = document.getElementById('scroller').contentDocument;
+      return (d.scrollingElement || d.documentElement).clientHeight;
+    }
+    return document.scrollingElement.clientHeight;
+  })()`);
   const base = { button: 'left', clickCount: 1, buttons: 1, pointerType: 'mouse' };
 
   await pageConn.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: x0, y: y0, ...base });
@@ -224,7 +235,7 @@ async function runCase(page, dpr) {
   // 关键断言：松手后不能自动开始截图（此前的 bug 就是这里）
   const phase2 = await evalPage(`(() => {
     const overlay = document.getElementById('__region_shot_overlay__');
-    const btn = [...document.documentElement.children].find(e => e.textContent === '✓ 完成截图');
+    const btn = document.getElementById('__region_shot_confirm__');
     return { overlay: !!overlay, btn: btn ? btn.getBoundingClientRect().toJSON() : null };
   })()`);
   if (!phase2.overlay || !phase2.btn) {
@@ -281,7 +292,7 @@ async function runCase(page, dpr) {
 
   // 第三步：点完成按钮
   const btn = await evalPage(`(() => {
-    const b = [...document.documentElement.children].find(e => e.textContent === '✓ 完成截图');
+    const b = document.getElementById('__region_shot_confirm__');
     const r = b.getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
   })()`);
@@ -289,7 +300,7 @@ async function runCase(page, dpr) {
   await pageConn.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: btn.x, y: btn.y, ...base });
   await sleep(120);
   const btnAfter = await evalPage(`(() => {
-    const b = [...document.documentElement.children].find(e => e.textContent === '✓ 完成截图');
+    const b = document.getElementById('__region_shot_confirm__');
     const r = b.getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
   })()`);
@@ -333,7 +344,7 @@ async function runCase(page, dpr) {
   }
 
   const wantW = 500 * dpr;
-  const wantH = 3300 * dpr;
+  const wantH = Math.round(afterScroll + clientH - topContentY) * dpr;
   const geo = await evalEd(`(() => {
     const r = document.getElementById('view').getBoundingClientRect();
     return { left: r.left, top: r.top, width: r.width, height: r.height };
@@ -596,7 +607,7 @@ async function runHorizontalCase(page, dpr) {
 
   // 按钮现在跟随选区，位置不固定，必须读实际坐标
   const btn = await evalPage(`(() => {
-    const b = [...document.documentElement.children].find(e => e.textContent === '✓ 完成截图');
+    const b = document.getElementById('__region_shot_confirm__');
     if (!b) return null;
     const r = b.getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 };

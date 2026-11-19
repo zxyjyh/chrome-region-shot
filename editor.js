@@ -18,6 +18,9 @@ const FONT_FAMILY =
 
 const COLORS = ['#ef4444', '#f97316', '#facc15', '#22c55e', '#3b82f6', '#ffffff', '#111827'];
 
+// 工具 → 底部提示文案的 key（文案在 i18n.js）
+const HINT_KEYS = { text: 'hintText', arrow: 'hintArrow', rect: 'hintRect', select: 'hintSelect' };
+
 const params = new URLSearchParams(location.search);
 const shotId = params.get('id');
 const filename = params.get('name') || `region-${stamp()}.png`;
@@ -60,7 +63,7 @@ let raf = 0;
 
   try {
     const blob = await readShot(shotId);
-    if (!blob) throw new Error('找不到截图数据（可能已被清理），请重新截图');
+    if (!blob) throw new Error(tr('loadFailed'));
     bmp = await createImageBitmap(blob);
   } catch (e) {
     fail(e.message || String(e));
@@ -314,6 +317,19 @@ function bindUI() {
   delBtn.addEventListener('click', deleteSelected);
   document.getElementById('save').addEventListener('click', save);
   copyBtn.addEventListener('click', copyImage);
+
+  // 语言切换：立即重绘静态文案，并同步当前工具提示与按钮状态
+  const langSel = document.getElementById('lang');
+  if (langSel) {
+    langSel.addEventListener('change', () => {
+      i18nSetMode(langSel.value);
+      i18nApply();
+      statusEl.classList.remove('err');
+      hint.textContent = tr(HINT_KEYS[tool] || 'hintText');
+      if (!saveBtn.disabled) saveBtn.textContent = tr('savePng');
+      if (!copyBtn.disabled) copyBtn.textContent = tr('copy');
+    });
+  }
   document.getElementById('cancel').addEventListener('click', closeTab);
   document.getElementById('zoomIn').addEventListener('click', () => setZoom(zoom * 1.25));
   document.getElementById('zoomOut').addEventListener('click', () => setZoom(zoom / 1.25));
@@ -469,13 +485,7 @@ function setTool(t) {
   document
     .querySelectorAll('[data-tool]')
     .forEach((b) => b.classList.toggle('is-on', b.dataset.tool === t));
-  hint.textContent =
-    {
-      text: '点击图片任意位置添加文字 · 拖动已有标注可调整位置 · 双击文字重新编辑',
-      arrow: '按住拖动画箭头 · Delete 删除选中',
-      rect: '按住拖动画矩形 · Delete 删除选中',
-      select: '点击标注选中，拖动调整位置 · Delete 删除 · ⌘Z 撤销',
-    }[t] || '';
+  hint.textContent = tr(HINT_KEYS[t] || 'hintText');
   view.style.cursor = t === 'select' ? 'default' : 'crosshair';
 }
 
@@ -729,13 +739,13 @@ async function save() {
   if (editing) commitInput(false);
 
   saveBtn.disabled = true;
-  saveBtn.textContent = '导出中…';
+  saveBtn.textContent = tr('exporting');
 
   const blob = await composeBlob();
   if (!blob) {
     saveBtn.disabled = false;
-    saveBtn.textContent = '✓ 保存 PNG';
-    fail('导出失败：图片过大，浏览器无法编码为 PNG');
+    saveBtn.textContent = tr('savePng');
+    fail(tr('exportTooLarge'));
     return;
   }
 
@@ -751,8 +761,8 @@ async function save() {
     return;
   }
   saveBtn.disabled = false;
-  saveBtn.textContent = '✓ 保存 PNG';
-  fail('保存失败，请重试');
+  saveBtn.textContent = tr('savePng');
+  fail(tr('saveFailed'));
 }
 
 async function copyImage() {
@@ -760,13 +770,13 @@ async function copyImage() {
   if (editing) commitInput(false);
 
   copyBtn.disabled = true;
-  copyBtn.textContent = '复制中…';
+  copyBtn.textContent = tr('copying');
 
   const blob = await composeBlob();
   if (!blob) {
     copyBtn.disabled = false;
-    copyBtn.textContent = '复制图片';
-    fail('导出失败：图片过大，浏览器无法编码为 PNG');
+    copyBtn.textContent = tr('copy');
+    fail(tr('exportTooLarge'));
     return;
   }
 
@@ -775,17 +785,17 @@ async function copyImage() {
   } catch (e) {
     console.warn('[RegionShot 标注] 复制到剪贴板失败', e);
     copyBtn.disabled = false;
-    copyBtn.textContent = '复制图片';
-    fail('复制失败，请改用「✓ 保存 PNG」');
+    copyBtn.textContent = tr('copy');
+    fail(tr('copyFailed'));
     return;
   }
 
   // 不关标签页：用户接下来要去微信 / 钉钉里粘贴
   statusEl.classList.remove('err');
-  hint.textContent = '已复制到剪贴板，去微信 / 钉钉里粘贴（⌘V / Ctrl+V）';
-  copyBtn.textContent = '✓ 已复制';
+  hint.textContent = tr('copyHint');
+  copyBtn.textContent = tr('copied');
   setTimeout(() => {
-    copyBtn.textContent = '复制图片';
+    copyBtn.textContent = tr('copy');
     copyBtn.disabled = false;
   }, 2000);
 }

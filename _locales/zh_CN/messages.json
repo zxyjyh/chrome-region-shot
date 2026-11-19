@@ -1,0 +1,20 @@
+{
+  "extName": {
+    "message": "Region Shot · 区域截图"
+  },
+  "extDescription": {
+    "message": "拖拽定起点，滚动到结束位置，截取任意长页面；在截图上添加文字、箭头、矩形后保存为 PNG 或直接复制到剪贴板。"
+  },
+  "actionTitle": {
+    "message": "框选截图 (Alt+Shift+S)"
+  },
+  "overlayStep1": {
+    "message": "第一步：拖拽确定起点和范围"
+  },
+  "overlayStep2": {
+    "message": "第二步：上下或左右滚动到结束位置，点「完成截图」或页面任意位置 · Esc 取消"
+  },
+  "overlayDone": {
+    "message": "✓ 完成截图"
+  }
+}

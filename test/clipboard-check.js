@@ -79,9 +79,10 @@ function prepareExtension() {
   for (const f of fs.readdirSync(path.join(ROOT, 'icons'))) {
     if (f.endsWith('.png')) fs.copyFileSync(path.join(ROOT, 'icons', f), path.join(EXT, 'icons', f));
   }
-  for (const f of ['background.js', 'editor.html', 'editor.css', 'editor.js', 'manifest.json']) {
+  for (const f of ['background.js', 'editor.html', 'editor.css', 'editor.js', 'i18n.js', 'manifest.json']) {
     fs.copyFileSync(path.join(ROOT, f), path.join(EXT, f));
   }
+  fs.cpSync(path.join(ROOT, '_locales'), path.join(EXT, '_locales'), { recursive: true });
 }
 
 async function launchChrome() {
@@ -261,8 +262,8 @@ const check = (name, ok, detail = '') => {
       hint: document.getElementById('hint').textContent,
       open: true,
     })`);
-    check('点击后按钮反馈「已复制」', state.text === '✓ 已复制', JSON.stringify(state.text));
-    check('提示文案指向微信 / 钉钉', /微信|钉钉/.test(state.hint), state.hint);
+    check('点击后按钮反馈「已复制」', /已复制|已複製|Copied/.test(state.text), JSON.stringify(state.text));
+    check('提示文案指向微信 / 钉钉', /微信|钉钉|WeChat|DingTalk/.test(state.hint), state.hint);
 
     // 系统剪贴板：这是唯一的外部裁判物
     let png = null;

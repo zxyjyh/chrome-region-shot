@@ -91,9 +91,10 @@ function prepareExtension() {
     if (f.endsWith('.png')) fs.copyFileSync(path.join(iconsSrc, f), path.join(EXT, 'icons', f));
   }
 
-  for (const f of ['editor.html', 'editor.css', 'editor.js']) {
+  for (const f of ['editor.html', 'editor.css', 'editor.js', 'i18n.js']) {
     fs.copyFileSync(path.join(ROOT, f), path.join(EXT, f));
   }
+  fs.cpSync(path.join(ROOT, '_locales'), path.join(EXT, '_locales'), { recursive: true });
 
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.json'), 'utf8'));
   manifest.host_permissions = ['<all_urls>'];
@@ -244,7 +245,7 @@ const check = (name, ok, detail = '') => {
 
     // ---- 3. 完成 ----
     const btn = await evalPage(`(() => {
-      const b = [...document.documentElement.children].find(e => e.textContent === '✓ 完成截图');
+      const b = document.getElementById('__region_shot_confirm__');
       if (!b) return null;
       const r = b.getBoundingClientRect();
       return { x: r.left + r.width / 2, y: r.top + r.height / 2 };

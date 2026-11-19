@@ -30,6 +30,11 @@ Region Shot · 区域截图
 框选起点和范围，滚动到终点，把跨多屏的网页区域截成一张完整 PNG；还能在图上加文字、箭头和框。
 ```
 
+繁體中文：
+```
+框選起點與範圍，捲動到終點，把跨多屏的網頁區域截成一張完整 PNG；還能在圖上加文字、箭頭和框。
+```
+
 English:
 ```
 Pick a start point and area, scroll to the end, capture a multi-screen region as a PNG, then annotate with text, arrows and boxes.

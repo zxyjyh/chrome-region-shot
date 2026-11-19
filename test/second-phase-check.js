@@ -9,10 +9,12 @@
 //
 // 检查项：
 //   - 滚轮能滚动页面
-//   - 选区跟着滚动延伸
+//   - 选区跟着滚动延伸，下边界贴住视口底部（覆盖整个可视区域）
 //   - 完成按钮跟着选区走
 //   - 在页面上拖动（位移 > 6px）不会确认截图
 //   - 拖动之后还能继续滚动
+//   - 滚到页面底部后选区延伸到内容底部
+//   - 离开边界再滚回，选区按滚动量 1:1 收缩 / 恢复
 //   - 原地点击能确认，并打开标注编辑器
 const { spawn } = require('child_process');
 const http = require('http');
@@ -87,9 +89,10 @@ function prepareExtension() {
   for (const f of fs.readdirSync(path.join(ROOT, 'icons'))) {
     if (f.endsWith('.png')) fs.copyFileSync(path.join(ROOT, 'icons', f), path.join(EXT, 'icons', f));
   }
-  for (const f of ['editor.html', 'editor.css', 'editor.js']) {
+  for (const f of ['editor.html', 'editor.css', 'editor.js', 'i18n.js']) {
     fs.copyFileSync(path.join(ROOT, f), path.join(EXT, f));
   }
+  fs.cpSync(path.join(ROOT, '_locales'), path.join(EXT, '_locales'), { recursive: true });
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.json'), 'utf8'));
   manifest.host_permissions = ['<all_urls>'];
   if (!manifest.permissions.includes('tabs')) manifest.permissions.push('tabs');
@@ -203,14 +206,19 @@ const check = (name, ok, detail = '') => {
     const state = () => evalPage(`(() => {
       const els = [...document.documentElement.children];
       const box = els.find(e => e.style && e.style.borderColor === 'rgb(16, 185, 129)');
-      const btn = els.find(e => e.textContent === '✓ 完成截图');
+      const btn = document.getElementById('__region_shot_confirm__');
       const r = box ? box.getBoundingClientRect() : null;
       const b = btn ? btn.getBoundingClientRect() : null;
+      const se = document.scrollingElement || document.documentElement;
       return {
         overlay: !!document.getElementById('__region_shot_overlay__'),
         y: Math.round(window.scrollY),
+        boxW: r ? Math.round(r.width) : 0,
         boxH: r ? Math.round(r.height) : 0,
         boxBottom: r ? Math.round(r.bottom) : 0,
+        boxBottomContent: r ? Math.round(r.bottom + window.scrollY) : 0,
+        clientH: se.clientHeight,
+        contentH: se.scrollHeight,
         btnX: b ? Math.round(b.left) : -1,
         btnY: b ? Math.round(b.top) : -1,
       };
@@ -237,8 +245,16 @@ const check = (name, ok, detail = '') => {
     const s1 = await state();
     check('滚轮能滚动页面', s1.y - s0.y > 500, `scrollY ${s0.y} → ${s1.y}`);
     check('选区跟着滚动延伸', s1.boxH > s0.boxH + 500, `高度 ${s0.boxH} → ${s1.boxH}`);
-    // 注意：选区底部在屏幕上的位置本来就不变（底边跟着滚动锚定），
-    // 所以这里断言的是「按钮一直贴着选区右下角」，不是「按钮位置变了」
+    // 滚动时选区下边界应该贴住视口底部（内容坐标 = scrollY + 视口高度），
+    // 而不是钉在拖动结束时的屏幕位置——否则选区下方永远有一条未被选中的内容带
+    check(
+      '选区下边界贴住视口底部',
+      Math.abs(s1.boxBottom - s1.clientH) <= 1 &&
+        Math.abs(s1.boxBottomContent - (s1.y + s1.clientH)) <= 1,
+      `屏幕底 ${s1.boxBottom} vs 视口高 ${s1.clientH}；内容底 ${s1.boxBottomContent} vs ${s1.y}+${s1.clientH}`
+    );
+    check('只纵向滚动时宽度保持拖动尺寸', s1.boxW === s0.boxW, `宽 ${s0.boxW} → ${s1.boxW}`);
+    // 按钮贴在选区右下角，选区右下角现在贴视口底，所以按钮应钳在视口右下区域内
     const btnGapOk = (s) => Math.abs(s.btnY - s.boxBottom) <= 60;
     check(
       '完成按钮始终贴着选区右下角',
@@ -260,7 +276,8 @@ const check = (name, ok, detail = '') => {
     check('拖动页面没有被误判成确认', s2.overlay && s2.btnX > 0, `overlay=${s2.overlay}`);
 
     // ---- 3. 拖动之后还能继续滚 ----
-    for (let i = 0; i < 8; i++) {
+    // 5 次 × 100 ≈ 480px，停在页面底部之前，把「滚到最底」留给 3.5
+    for (let i = 0; i < 5; i++) {
       await pageConn.send('Input.dispatchMouseEvent', {
         type: 'mouseWheel', x: 500, y: 400, deltaX: 0, deltaY: 100, pointerType: 'mouse',
       });
@@ -270,6 +287,42 @@ const check = (name, ok, detail = '') => {
     const s3 = await state();
     check('拖动之后还能继续滚动', s3.y - s2.y > 300, `scrollY ${s2.y} → ${s3.y}`);
     check('选区继续延伸', s3.boxH >= s2.boxH, `高度 ${s2.boxH} → ${s3.boxH}`);
+
+    // ---- 3.5 滚到页面最底部：选区必须延伸到内容底部 ----
+    // 回归：下边界只跟滚动增量的话，到底后底边会停在视口中间，页面最后一段截不到。
+    // 现在下边界贴视口底，滚到最底 = 视口底 = 内容底。
+    await evalPage(`window.scrollTo(0, document.scrollingElement.scrollHeight)`);
+    await sleep(400);
+    const sBottom = await state();
+    check(
+      '滚到页面底部后选区延伸到内容底部',
+      sBottom.y + sBottom.clientH >= sBottom.contentH - 2 &&
+        Math.abs(sBottom.boxBottomContent - sBottom.contentH) <= 2,
+      JSON.stringify(sBottom)
+    );
+
+    // ---- 3.6 离开边界再滚回：按滚动量 1:1 收缩 / 恢复 ----
+    await evalPage(`window.scrollTo(0, Math.max(0, window.scrollY - 400))`);
+    await sleep(300);
+    const sUp = await state();
+    check(
+      '离开边界后选区按滚动量 1:1 收缩',
+      Math.abs(sBottom.boxH - sUp.boxH - (sBottom.y - sUp.y)) <= 4,
+      `高度 ${sBottom.boxH} → ${sUp.boxH}，滚动 ${sBottom.y} → ${sUp.y}`
+    );
+    await evalPage(`window.scrollTo(0, document.scrollingElement.scrollHeight)`);
+    await sleep(300);
+    const sEnd = await state();
+    check(
+      '滚回底部时选区按滚动量 1:1 恢复',
+      Math.abs(sEnd.boxH - sUp.boxH - (sEnd.y - sUp.y)) <= 4,
+      `高度 ${sUp.boxH} → ${sEnd.boxH}，滚动 ${sUp.y} → ${sEnd.y}`
+    );
+    check(
+      '回到内容底部（选区完整）',
+      Math.abs(sEnd.boxH - sBottom.boxH) <= 2,
+      `高度 ${sEnd.boxH} vs ${sBottom.boxH}`
+    );
 
     // ---- 4. 原地点击确认 ----
     await pageConn.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: 320, y: 620, ...base });
@@ -297,7 +350,20 @@ const check = (name, ok, detail = '') => {
         await sleep(200);
       }
       const bmp = edReady ? await evalEd(`({ w: bmp.width, h: bmp.height })`) : null;
-      check('编辑器就绪且拿到了原图', !!edReady && !!bmp && bmp.w > 300, JSON.stringify(bmp));
+      // 期望：截图高度按选区高 × dpr（dpr 由图像宽 / 选区宽算出），
+      // 证明拼出来的图真的包含滚到底的那一段，而不只是选区框画到了底
+      const dpr = bmp ? bmp.w / sBottom.boxW : 0;
+      const wantImgH = sBottom.boxH * dpr;
+      check(
+        '编辑器就绪且拿到了原图',
+        !!edReady && !!bmp && bmp.w > 300,
+        JSON.stringify(bmp)
+      );
+      check(
+        '原图高度覆盖到页面底部（拼图完整）',
+        !!bmp && Math.abs(bmp.h - wantImgH) <= 4,
+        `图像 ${bmp && bmp.w}x${bmp && bmp.h}，期望高 ${Math.round(wantImgH)}（选区 ${sBottom.boxW}x${sBottom.boxH} dpr ${dpr}）`
+      );
       // 关掉编辑器，避免残留
       await evalEd(`document.getElementById('cancel').click()`).catch(() => {});
       edConn.ws.close();

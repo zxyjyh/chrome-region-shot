@@ -244,6 +244,35 @@ body {
 
 .zoom { display: inline-flex; align-items: center; gap: 4px; }
 
+/* 语言选择：放在顶栏右侧，带地球图标，避免藏在角落 */
+
+.lang {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 32px;
+  padding: 0 6px 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #20262f;
+  cursor: pointer;
+}
+
+.lang:hover { background: #283040; }
+
+.lang select {
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  padding: 0 2px;
+  cursor: pointer;
+  outline: none;
+}
+
+.langIcon { font-size: 13px; line-height: 1; }
+
 #zoomVal {
   min-width: 46px;
   text-align: center;

@@ -47,7 +47,7 @@ if (!/^\d{1,5}(\.\d{1,5}){0,3}$/.test(version) || version.split('.').some((n) =>
 if (!manifest.name) fail('缺少 name');
 if (!manifest.description) {
   fail('缺少 description');
-} else if (manifest.description.length > 132) {
+} else if (!/^__MSG_/.test(manifest.description) && manifest.description.length > 132) {
   fail(`description 超长：${manifest.description.length} 字符，上限 132`);
 }
 if (!manifest.icons) fail('缺少 icons 字段（商店要求）');
@@ -89,6 +89,51 @@ if (manifest.options_ui && manifest.options_ui.page) addFile(manifest.options_ui
     addFile(r, `web_accessible_resources[${i}]`);
   });
 });
+
+// ---------- 国际化文案 ----------
+// manifest 里的 __MSG_xxx__ 从 _locales/<locale>/messages.json 取。
+// Chrome 打包要求 _locales 整目录随包提供，漏了会在安装时直接报错。
+const msgRefs = [...new Set([...rawManifest.matchAll(/__MSG_([A-Za-z0-9_]+)__/g)].map((m) => m[1]))];
+if (msgRefs.length) {
+  if (!manifest.default_locale) {
+    fail('manifest 使用了 __MSG_ 占位符，但没有声明 default_locale');
+  } else {
+    const locRoot = path.join(ROOT, '_locales');
+    if (!fs.existsSync(locRoot)) {
+      fail('缺少 _locales 目录');
+    } else {
+      const locales = fs
+        .readdirSync(locRoot)
+        .filter((d) => fs.statSync(path.join(locRoot, d)).isDirectory());
+      if (!locales.includes(manifest.default_locale)) {
+        fail(`default_locale "${manifest.default_locale}" 在 _locales 下不存在`);
+      }
+      for (const loc of locales) {
+        const rel = `_locales/${loc}/messages.json`;
+        const abs = path.join(ROOT, rel);
+        if (!fs.existsSync(abs)) {
+          fail(`${rel} 不存在`);
+          continue;
+        }
+        let msgs;
+        try {
+          msgs = JSON.parse(fs.readFileSync(abs, 'utf8'));
+        } catch (e) {
+          fail(`${rel} 不是合法 JSON：${e.message}`);
+          continue;
+        }
+        for (const key of msgRefs) {
+          if (!msgs[key] || typeof msgs[key].message !== 'string') fail(`${rel} 缺少 ${key}`);
+        }
+        const desc = msgs.extDescription && msgs.extDescription.message;
+        if (desc && desc.length > 132) {
+          fail(`${rel} 的 extDescription 超长：${desc.length} 字符（上限 132）`);
+        }
+        files.add(rel);
+      }
+    }
+  }
+}
 
 // ---------- 运行时打开的扩展页面 ----------
 // editor.html 这类页面不在 manifest 里（background 用 chrome.tabs.create 打开），

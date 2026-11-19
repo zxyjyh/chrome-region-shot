@@ -119,7 +119,7 @@
 <ul>
   <li><strong>截图只在扩展内部短暂交接一次，随即删除。</strong>拼接完成后，PNG 会用一个一次性的随机 ID 写入扩展自身来源（origin）下的 IndexedDB，交给紧接打开的标注编辑器读取；编辑器读到数据的同一时刻就删除这条记录。其他网站页面、其他扩展都访问不到这份数据。</li>
   <li>如果标注编辑器没能打开（例如标签页创建失败），扩展会立即删除这条记录并改为直接保存原图——不会留下无人读取的副本。</li>
-  <li>除此之外不使用任何持久化存储：没有 <code>chrome.storage</code>、<code>localStorage</code>、Cookie。标注内容（文字、箭头、矩形）只存在于编辑器页面的内存中，关闭页面即消失。</li>
+  <li>除此之外只使用本地存储保存一个界面语言偏好（值为 <code>auto</code>、<code>zh_CN</code>、<code>zh_TW</code>、<code>en</code> 之一）：编辑页用 <code>localStorage</code> 即时读写，同一份偏好也写入 <code>chrome.storage.local</code>，让框选界面读到一致的语言。除这个语言偏好外不存储任何其他内容，没有 Cookie。标注内容（文字、箭头、矩形）只存在于编辑器页面的内存中，关闭页面即消失。</li>
   <li>最终生成的 PNG 文件保存在你自己的下载文件夹，由你自行决定保留、移动或删除。扩展不会再次读取它。</li>
   <li>如果你使用「复制图片」，截图会进入系统剪贴板，由操作系统保管，直到被下一次复制覆盖；扩展不会读取剪贴板中的内容。剪贴板内容只会流向你自己粘贴到的应用。</li>
 </ul>
@@ -131,7 +131,7 @@
 <p>不共享，不出售。扩展不包含任何第三方 SDK、广告组件、统计工具或外部分析服务。我们不会把数据转让给广告平台、数据经纪商或任何其他第三方。</p>
 
 <h2>7. 权限说明</h2>
-<p>扩展申请了四项权限，每一项都只服务于「截图」这一个用途：</p>
+<p>扩展申请了五项权限，每一项都只服务于「截图」这一个用途：</p>
 <table>
   <tr><th>权限</th><th>为什么需要</th></tr>
   <tr>
@@ -150,10 +150,14 @@
     <td><code>debugger</code></td>
     <td>调用 Chrome 调试协议（CDP）的截图接口读取页面画面。<strong>详见下一节。</strong></td>
   </tr>
+  <tr>
+    <td><code>storage</code></td>
+    <td>只保存一个界面语言偏好（自动 / 简体 / 繁体 / 英文），让框选界面和标注编辑器使用同一种语言。不保存任何其他内容。</td>
+  </tr>
 </table>
 
 <h2>8. 关于 <code>debugger</code> 权限的特别说明</h2>
-<p>这是四项权限里最需要解释的一项，所以我们单独说明它具体做了什么、以及没做什么。</p>
+<p>这是五项权限里最需要解释的一项，所以我们单独说明它具体做了什么、以及没做什么。</p>
 <ul>
   <li><strong>什么时候附加：</strong>只在你点击扩展图标、开始截图之后。不是常驻附加，不会在你日常浏览时挂在页面上。</li>
   <li><strong>附加期间会做什么：</strong>只发送一条命令 —— <code>Page.captureScreenshot</code>，也就是「把当前页面画面给我」。除此之外不读取 DOM、不读取网络请求、不读取 Cookie、不读取表单内容、不执行 JavaScript、不修改页面。</li>
@@ -245,7 +249,7 @@ The use of information received from Google APIs will adhere to the Chrome Web S
 <ul>
   <li><strong>The screenshot is handed over once, inside the extension, and deleted immediately.</strong> After stitching, the PNG is written to IndexedDB under the extension's own origin with a one-time random ID, so the annotation editor that opens next can read it. The editor deletes that record the moment it reads it. No website page and no other extension can reach this data.</li>
   <li>If the annotation editor fails to open (for example, the tab cannot be created), the extension deletes the record immediately and saves the original image directly instead — no unread copy is left behind.</li>
-  <li>No other persistent storage is used: no <code>chrome.storage</code>, no <code>localStorage</code>, no cookies. Annotations (text, arrows, rectangles) exist only in the editor page's memory and disappear when the page closes.</li>
+  <li>The only other local storage is a single interface-language preference (one of <code>auto</code>, <code>zh_CN</code>, <code>zh_TW</code>, <code>en</code>): the editor reads and writes it in <code>localStorage</code>, and the same value is mirrored to <code>chrome.storage.local</code> so the region-selection overlay shows the same language. Nothing else is stored and no cookies are used. Annotations (text, arrows, rectangles) exist only in the editor page's memory and disappear when the page closes.</li>
   <li>The resulting PNG is saved to your own Downloads folder. You decide whether to keep, move, or delete it. The extension never reads it again.</li>
   <li>If you use "Copy image", the screenshot is placed on the system clipboard by the operating system and stays there until overwritten by your next copy action. The extension never reads clipboard contents; the image only goes to whichever application you paste it into.</li>
 </ul>
@@ -263,6 +267,7 @@ The use of information received from Google APIs will adhere to the Chrome Web S
   <tr><td><code>scripting</code></td><td>Injects the region-selection interface into the current page and controls page scrolling during the capture.</td></tr>
   <tr><td><code>downloads</code></td><td>Saves the generated PNG to your Downloads folder.</td></tr>
   <tr><td><code>debugger</code></td><td>Calls the Chrome DevTools Protocol screenshot method to read the rendered page. <strong>See the next section.</strong></td></tr>
+  <tr><td><code>storage</code></td><td>Stores a single interface-language preference (auto / Simplified Chinese / Traditional Chinese / English) so the region-selection overlay and the annotation editor use the same language. Nothing else is stored.</td></tr>
 </table>
 
 <h2>8. About the <code>debugger</code> permission</h2>

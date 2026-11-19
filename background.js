@@ -50,8 +50,12 @@ async function runCapture(tab) {
     // 1) 选区（返回的是「滚动容器的内容坐标」）
     let sel;
     try {
+      // 界面语言：编辑页选的语言优先，没选过就跟随浏览器
+      const overlayText = await overlayMessages(resolveOverlayLang(await getLangPref()));
       sel = await execResult(tab.id, selectionOverlay, [
         'v' + chrome.runtime.getManifest().version,
+        // 注入的函数运行在页面隔离环境，文案在 background 侧取好再传进去
+        overlayText,
       ]);
     } catch (e) {
       console.warn('[RegionShot] 注入选区失败', e);
@@ -360,6 +364,56 @@ async function saveWithFallback(tab, dataUrl, filename) {
 }
 
 // ---------------------------------------------------------------------------
+// 界面语言：编辑页的选择存在 chrome.storage，框选遮罩沿用同一偏好
+// ---------------------------------------------------------------------------
+
+const OVERLAY_MSG_CACHE = new Map();
+
+function resolveOverlayLang(mode) {
+  if (mode === 'zh_CN' || mode === 'zh_TW' || mode === 'en') return mode;
+  let ui = '';
+  try {
+    ui = String(chrome.i18n.getUILanguage() || '');
+  } catch {
+    /* ignore */
+  }
+  ui = ui.toLowerCase().replace('_', '-');
+  if (ui.startsWith('zh')) return /-(tw|hk|mo)|hant/.test(ui) ? 'zh_TW' : 'zh_CN';
+  return 'en';
+}
+
+async function getLangPref() {
+  try {
+    const r = await chrome.storage.local.get('regionShotLang');
+    return r.regionShotLang || 'auto';
+  } catch {
+    return 'auto';
+  }
+}
+
+async function overlayMessages(lang) {
+  if (OVERLAY_MSG_CACHE.has(lang)) return OVERLAY_MSG_CACHE.get(lang);
+
+  // 先放浏览器语言的兜底值，语言包读不到时仍然可用
+  const out = {
+    step1: chrome.i18n.getMessage('overlayStep1'),
+    step2: chrome.i18n.getMessage('overlayStep2'),
+    done: chrome.i18n.getMessage('overlayDone'),
+  };
+  try {
+    const res = await fetch(chrome.runtime.getURL(`_locales/${lang}/messages.json`));
+    const json = await res.json();
+    out.step1 = json.overlayStep1.message;
+    out.step2 = json.overlayStep2.message;
+    out.done = json.overlayDone.message;
+  } catch (e) {
+    console.warn('[RegionShot] 读取语言包失败，回退浏览器语言', e);
+  }
+  OVERLAY_MSG_CACHE.set(lang, out);
+  return out;
+}
+
+// ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------
 
@@ -601,7 +655,7 @@ function clearMark() {
   return true;
 }
 
-function selectionOverlay(ver) {
+function selectionOverlay(ver, L) {
   return new Promise((resolve) => {
     const ID = '__region_shot_overlay__';
     const MARK = 'data-region-shot-scroller';
@@ -674,17 +728,18 @@ function selectionOverlay(ver) {
       return { x: clientX + window.scrollX, y: clientY + window.scrollY };
     };
 
-    // 读取目标容器当前的滚动位置
+    // 读取目标容器当前的滚动位置和视口尺寸（内容坐标下，视口 = [scrollX/Y, scrollX/Y + clientW/H]）
     const readScroll = () => {
       const t = target;
       if (t && t.kind === 'iframe') {
         const se = t.doc.scrollingElement || t.doc.documentElement;
-        return { x: se.scrollLeft, y: se.scrollTop };
+        return { x: se.scrollLeft, y: se.scrollTop, viewportW: se.clientWidth, viewportH: se.clientHeight };
       }
       if (t && t.kind === 'element') {
-        return { x: t.el.scrollLeft, y: t.el.scrollTop };
+        return { x: t.el.scrollLeft, y: t.el.scrollTop, viewportW: t.el.clientWidth, viewportH: t.el.clientHeight };
       }
-      return { x: window.scrollX, y: window.scrollY };
+      const se = document.scrollingElement || document.documentElement;
+      return { x: window.scrollX, y: window.scrollY, viewportW: se.clientWidth, viewportH: se.clientHeight };
     };
 
     const root = document.createElement('div');
@@ -711,7 +766,7 @@ function selectionOverlay(ver) {
     ].join(';');
 
     const tip = document.createElement('div');
-    tip.textContent = ver + ' · 第一步：拖拽确定起点和范围';
+    tip.textContent = ver + ' · ' + L.step1;
     tip.style.cssText = [
       'position:fixed',
       'z-index:2147483647',
@@ -755,12 +810,12 @@ function selectionOverlay(ver) {
     let phase = 0;
     let startContentX = 0;
     let startContentY = 0;
-    let fixedWidth = 0;
-    let fixedHeight = 0;
     let anchorEndX = 0; // 进入第二阶段时的选区右下角（内容坐标）
     let anchorEndY = 0;
-    let baseScrollX = 0; // 进入第二阶段时的滚动位置，用来算滚动增量
+    let baseScrollX = 0; // 进入第二阶段时的滚动位置，用来判断滚动方向
     let baseScrollY = 0;
+    let stickyBottom = false; // 向下滚过之后，下边界贴视口底
+    let stickyRight = false; // 向右滚过之后，右边界贴视口右缘
     let lastClientX = 0;
     let lastClientY = 0;
     let current = { x: 0, y: 0, w: 0, h: 0 };
@@ -861,22 +916,31 @@ function selectionOverlay(ver) {
       paint();
     };
 
-    // 第二阶段：起点和框选尺寸固定，右下角只跟滚动走。
+    // 第二阶段：选区始终覆盖「当前视口」加「最初拖出来的框」。
+    // 向下滚动后，下边界贴住视口底：滚到哪里，可视区域里已滚过的内容就都算进选区，
+    // 滚到页面底时视口下边缘就是内容底，自然包含到底。
+    // 向上滚动时按同一规则回缩，但不会小于最初拖出来的区域。
+    // 横向同理，只有用户真的向右滚过才把右边界贴到视口右缘——否则只纵向滚动
+    // 会把用户拖好的宽度撑到整屏。
     // 这里刻意不读鼠标位置——按钮贴在选区右下角，如果选区跟着鼠标跑，
     // 鼠标一靠近按钮选区就把按钮推走，永远点不中。
     const updateAdjusting = () => {
       const s = readScroll();
-      const endX = anchorEndX + (s.x - baseScrollX);
-      const endY = anchorEndY + (s.y - baseScrollY);
-      const left = Math.min(startContentX, endX);
-      const right = Math.max(startContentX + fixedWidth, endX);
-      const top = Math.min(startContentY, endY);
-      const bottom = Math.max(startContentY + fixedHeight, endY);
+      if (s.y > baseScrollY + 0.5) stickyBottom = true;
+      if (s.x > baseScrollX + 0.5) stickyRight = true;
+
+      const selTop = Math.min(startContentY, anchorEndY);
+      const selLeft = Math.min(startContentX, anchorEndX);
+      const initBottom = Math.max(startContentY, anchorEndY);
+      const initRight = Math.max(startContentX, anchorEndX);
+      const bottom = stickyBottom ? Math.max(initBottom, s.y + s.viewportH) : initBottom;
+      const right = stickyRight ? Math.max(initRight, s.x + s.viewportW) : initRight;
+
       current = {
-        x: left,
-        y: top,
-        w: right - left,
-        h: bottom - top,
+        x: selLeft,
+        y: selTop,
+        w: right - selLeft,
+        h: bottom - selTop,
       };
       paint();
     };
@@ -1103,11 +1167,9 @@ function selectionOverlay(ver) {
         return;
       }
 
-      // 进入第二阶段：宽度和起点固定，底部随鼠标/滚动延伸
+      // 进入第二阶段：选区随滚动覆盖整个可视区域，见 updateAdjusting
       phase = 2;
       phaseAt = Date.now();
-      fixedWidth = current.w;
-      fixedHeight = current.h;
       startContentX = current.x;
       startContentY = current.y;
       anchorEndX = current.x + current.w;
@@ -1115,14 +1177,17 @@ function selectionOverlay(ver) {
       const s0 = readScroll();
       baseScrollX = s0.x;
       baseScrollY = s0.y;
+      stickyBottom = false;
+      stickyRight = false;
       box.style.borderColor = '#10b981';
       root.style.background = 'rgba(0,0,0,0.06)';
-      tip.textContent = ver + ' · 第二步：上下或左右滚动到结束位置，点「完成截图」或页面任意位置 · Esc 取消';
+      tip.textContent = ver + ' · ' + L.step2;
 
       root.style.pointerEvents = 'none';
 
       confirmBtn = document.createElement('div');
-      confirmBtn.textContent = '✓ 完成截图';
+      confirmBtn.textContent = L.done;
+      confirmBtn.id = '__region_shot_confirm__'; // 测试与脚本用它定位，不依赖界面语言
       confirmBtn.style.cssText = [
         'position:fixed',
         'right:24px',

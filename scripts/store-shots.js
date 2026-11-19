@@ -77,9 +77,10 @@ function prepareExtension() {
   for (const f of fs.readdirSync(path.join(ROOT, 'icons'))) {
     if (f.endsWith('.png')) fs.copyFileSync(path.join(ROOT, 'icons', f), path.join(EXT, 'icons', f));
   }
-  for (const f of ['editor.html', 'editor.css', 'editor.js']) {
+  for (const f of ['editor.html', 'editor.css', 'editor.js', 'i18n.js']) {
     fs.copyFileSync(path.join(ROOT, f), path.join(EXT, f));
   }
+  fs.cpSync(path.join(ROOT, '_locales'), path.join(EXT, '_locales'), { recursive: true });
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.json'), 'utf8'));
   manifest.host_permissions = ['<all_urls>'];
   if (!manifest.permissions.includes('tabs')) manifest.permissions.push('tabs');

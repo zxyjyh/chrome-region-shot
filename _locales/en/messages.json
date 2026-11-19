@@ -1,0 +1,20 @@
+{
+  "extName": {
+    "message": "Region Shot · Region Capture"
+  },
+  "extDescription": {
+    "message": "Drag a start point, scroll to the end, capture any long page region as one PNG, annotate it, then save or copy it."
+  },
+  "actionTitle": {
+    "message": "Capture a region (Alt+Shift+S)"
+  },
+  "overlayStep1": {
+    "message": "Step 1: drag to set the start point and area"
+  },
+  "overlayStep2": {
+    "message": "Step 2: scroll to the end, then click \"Done\" or anywhere on the page · Esc to cancel"
+  },
+  "overlayDone": {
+    "message": "✓ Done"
+  }
+}

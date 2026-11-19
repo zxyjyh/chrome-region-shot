@@ -1,6 +1,6 @@
 {
   "name": "region-shot",
-  "version": "1.7.0",
+  "version": "1.8.3",
   "private": true,
   "description": "Region Shot · 区域截图 — Chrome 扩展",
   "scripts": {
@@ -10,6 +10,7 @@
     "test:visual": "node test/manual-check.js",
     "test:phase2": "node test/second-phase-check.js",
     "test:clipboard": "node test/clipboard-check.js",
+    "test:i18n": "node test/i18n-check.js",
     "store:shots": "node scripts/store-shots.js"
   }
 }
