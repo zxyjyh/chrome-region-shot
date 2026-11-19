@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>为什么滚动截图这么难 — 界面笔记</title>
+<style>
+  * { box-sizing: border-box; }
+  html { scroll-behavior: auto; }
+  body {
+    margin: 0;
+    background: #f6f7f9;
+    color: #1f2430;
+    font: 17px/1.85 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .nav {
+    position: sticky; top: 0; z-index: 5;
+    height: 68px; display: flex; align-items: center; gap: 28px;
+    padding: 0 48px; background: rgba(255,255,255,.92);
+    border-bottom: 1px solid #e5e7eb; backdrop-filter: blur(8px);
+  }
+  .nav .logo { font-weight: 800; font-size: 17px; letter-spacing: .3px; }
+  .nav .logo em { font-style: normal; color: #6366f1; }
+  .nav a { color: #6b7280; text-decoration: none; font-size: 14px; }
+  .nav a.on { color: #111827; font-weight: 600; }
+
+  .wrap { max-width: 860px; margin: 0 auto; padding: 56px 28px 120px; }
+  .kicker { color: #6366f1; font-size: 13px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; }
+  h1 { font-size: 42px; line-height: 1.25; margin: 14px 0 18px; letter-spacing: -.6px; }
+  .meta { color: #9ca3af; font-size: 14px; margin-bottom: 40px; }
+  .meta b { color: #4b5563; font-weight: 600; }
+  h2 { font-size: 25px; margin: 52px 0 16px; letter-spacing: -.2px; }
+  p { margin: 0 0 20px; color: #33394a; }
+  .lead { font-size: 19px; color: #4b5563; }
+
+  .quote {
+    margin: 32px 0; padding: 20px 24px; border-left: 3px solid #6366f1;
+    background: #fff; border-radius: 0 10px 10px 0; color: #444b5e; font-size: 16px;
+  }
+  .figure {
+    margin: 32px 0; padding: 22px; background: #fff;
+    border: 1px solid #e5e7eb; border-radius: 14px;
+  }
+  .figure .cap { color: #9ca3af; font-size: 13px; margin-top: 14px; }
+  .bars { display: flex; align-items: flex-end; gap: 18px; height: 180px; padding: 0 12px; }
+  .bars i { flex: 1; background: linear-gradient(180deg, #818cf8, #6366f1); border-radius: 6px 6px 0 0; }
+  .bars i:nth-child(1) { height: 34%; }
+  .bars i:nth-child(2) { height: 52%; }
+  .bars i:nth-child(3) { height: 41%; }
+  .bars i:nth-child(4) { height: 78%; }
+  .bars i:nth-child(5) { height: 64%; }
+  .bars i:nth-child(6) { height: 96%; }
+
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin: 28px 0; }
+  .card {
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 20px;
+  }
+  .card .n { font-size: 30px; font-weight: 800; color: #6366f1; letter-spacing: -1px; }
+  .card .t { font-size: 13px; color: #6b7280; margin-top: 6px; }
+
+  table { width: 100%; border-collapse: collapse; margin: 28px 0; background: #fff; border-radius: 12px; overflow: hidden; }
+  th, td { text-align: left; padding: 13px 16px; border-bottom: 1px solid #eef0f3; font-size: 15px; }
+  th { background: #fafbfc; color: #6b7280; font-weight: 600; font-size: 13px; }
+  tr:last-child td { border-bottom: 0; }
+  code { background: #eef0ff; color: #4f46e5; padding: 2px 6px; border-radius: 5px; font-size: .9em; }
+
+  .tagRow { display: flex; gap: 10px; margin-top: 48px; flex-wrap: wrap; }
+  .tag { font-size: 13px; color: #6b7280; background: #eef0f3; border-radius: 999px; padding: 6px 14px; }
+  .footer { border-top: 1px solid #e5e7eb; margin-top: 64px; padding-top: 28px; color: #9ca3af; font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="nav">
+  <div class="logo">界面<em>笔记</em></div>
+  <a class="on" href="#">文章</a>
+  <a href="#">工具</a>
+  <a href="#">订阅</a>
+</div>
+
+<div class="wrap">
+  <div class="kicker">Engineering · 浏览器</div>
+  <h1>为什么滚动截图这么难</h1>
+  <div class="meta">2026 年 11 月 18 日 · <b>12 分钟阅读</b> · 作者 林舟</div>
+
+  <p class="lead">把一整页网页存成一张图，听起来像是截图工具里最基础的功能。真正动手做的时候你会发现，浏览器并没有给你一个「把整页拍下来」的按钮——它只肯给你当前视口。</p>
+
+  <h2>视口是一扇窗，不是一张纸</h2>
+  <p>浏览器渲染页面的方式，决定了同一时刻只有可视区域真正被绘制。列表滚到屏幕外的部分，样式也许还在，像素却不一定。<code>captureVisibleTab</code> 这类接口能拿到的东西，恰好就是「现在看得见的那一屏」。</p>
+  <p>想露出一整页，只有两个办法：要么让页面变高，要么让窗口滚动。前者会把页面布局撑变形，后者需要一帧一帧地等渲染完成，再把每一帧拼回去。</p>
+
+  <div class="quote">
+    「整页截图」在实现上从来不是一次拍照，而是一次手工的、有状态的、依赖时序的拼接。
+  </div>
+
+  <h2>滚动之后，页面需要时间</h2>
+  <p>滚动是一个异步动作。设置了 <code>scrollTop</code> 不代表像素已经画完；懒加载的图片要等网络，虚拟列表要等下一帧，字体替换会改变行高。拼接时如果不等，你会看到上一屏的残影，或者两屏之间多出一条缝。</p>
+
+  <figure class="figure">
+    <div class="bars"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <div class="cap">图 1 · 每一帧的稳定耗时并不可预测，短页面和长列表能差一个数量级。</div>
+  </figure>
+
+  <h2>滚动容器不止一种</h2>
+  <p>最麻烦的不是窗口本身，而是页面内部自己滚动的区域。大量单页应用把主内容放进一个 <code>overflow: auto</code> 的容器里，窗口高度纹丝不动。另一些页面把正文放进同源 iframe，滚动发生在另一份文档里。</p>
+
+  <p>这三种结构，判断「往哪儿滚、滚多少」的逻辑完全不同：窗口要读 <code>scrollY</code>，容器要沿祖先链找可滚动元素，iframe 要先跨进 <code>contentWindow</code>。任何一处判断错，用户看到的就是一条重复的、拼歪的图。</p>
+
+  <div class="cards">
+    <div class="card"><div class="n">3</div><div class="t">常见的滚动结构</div></div>
+    <div class="card"><div class="n">2×</div><div class="t">DPR 带来的像素差</div></div>
+    <div class="card"><div class="n">0</div><div class="t">可以依赖的同步保证</div></div>
+  </div>
+
+  <h2>拼接的三个约束</h2>
+  <p>把这些磨平之后，剩下的是三个必须同时满足的约束。第一个是尺寸：设备像素比让逻辑像素和物理像素差两倍，选区的坐标必须换算到截图坐标系。第二个是重叠：为了不丢内容，相邻两屏要留出重叠区，拼接时去重。第三个是还原：截完必须把滚动位置、聚焦元素、被临时改动的样式全部恢复，否则用户会觉得页面「被弄乱了」。</p>
+
+  <table>
+    <thead><tr><th>结构</th><th>滚动目标</th><th>稳定信号</th><th>常见坑</th></tr></thead>
+    <tbody>
+      <tr><td>窗口滚动</td><td>document.scrollingElement</td><td>scroll 事件 + 两帧</td><td>固定定位元素重复出现</td></tr>
+      <tr><td>内部容器</td><td>最近的可滚动祖先</td><td>容器 scrollTop 变化</td><td>嵌套滚动抢事件</td></tr>
+      <tr><td>同源 iframe</td><td>iframe.contentWindow</td><td>跨文档帧同步</td><td>坐标原点不一致</td></tr>
+    </tbody>
+  </table>
+
+  <h2>结论</h2>
+  <p>滚动截图难，不是因为某个 API 缺失，而是因为它把「渲染时序」这件平时藏起来的事摆到了台面上。你要自己判断什么时候画面真的稳定了，什么时候可以安全地拍下一张。</p>
+  <p>理解这一点之后，很多看似奇怪的设计就说得通了：为什么要限制选区必须连续、为什么要等一小段延时、为什么截完要恢复滚动位置。它们不是补丁，而是这个功能本身的形状。</p>
+
+  <div class="tagRow">
+    <span class="tag">浏览器</span>
+    <span class="tag">截图</span>
+    <span class="tag">渲染</span>
+    <span class="tag">工程实践</span>
+  </div>
+
+  <div class="footer">界面笔记 · 每周一篇关于界面与工具的长文</div>
+</div>
+</body>
+</html>

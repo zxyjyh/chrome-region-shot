@@ -90,6 +90,30 @@ if (manifest.options_ui && manifest.options_ui.page) addFile(manifest.options_ui
   });
 });
 
+// ---------- 运行时打开的扩展页面 ----------
+// editor.html 这类页面不在 manifest 里（background 用 chrome.tabs.create 打开），
+// 从 background 的 getURL() 反查，再顺着页面 HTML 的 src/href 收集资源。
+// 不写死文件清单：以后再加页面/样式，也不会漏进包。
+function collectPage(page, where) {
+  if (files.has(page)) return;
+  addFile(page, where);
+  if (!files.has(page) || !page.endsWith('.html')) return;
+  const html = fs.readFileSync(path.join(ROOT, page), 'utf8');
+  for (const m of html.matchAll(/(?:src|href)\s*=\s*["']([^"']+)["']/g)) {
+    const ref = m[1].trim();
+    if (!ref || /^(?:[a-z][a-z0-9+.-]*:|\/\/|\/|#)/i.test(ref)) continue; // 远程、绝对路径、锚点
+    collectPage(ref.replace(/^\.\//, ''), `${page} 引用`);
+  }
+}
+
+const bgWorker = manifest.background && manifest.background.service_worker;
+if (bgWorker && fs.existsSync(path.join(ROOT, bgWorker))) {
+  const code = fs.readFileSync(path.join(ROOT, bgWorker), 'utf8');
+  for (const m of code.matchAll(/getURL\(\s*['"]([^'"]+\.html)['"]/g)) {
+    collectPage(m[1], `${bgWorker} getURL`);
+  }
+}
+
 // ---------- 杂项检查 ----------
 for (const f of files) {
   if (f.includes('__MACOSX') || f.endsWith('.DS_Store')) fail(`文件清单里混进了系统垃圾：${f}`);

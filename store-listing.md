@@ -1,6 +1,6 @@
 # Chrome 应用商店上架材料
 
-> 对应版本：`1.6.0`（manifest.json）
+> 对应版本：`1.7.0`（manifest.json）
 > 生成日期：2026-11-17
 > 配套文件：`privacy-policy.html`（隐私政策页面，需要托管到公网 URL）
 
@@ -12,7 +12,7 @@
 |---|---|---|
 | 1 | **隐私政策公网 URL** | 商店后台的「Privacy policy」字段要求一个可公开访问的 https 地址，不接受本地文件。把 `privacy-policy.html` 放到 GitHub Pages / Vercel / 自己的服务器即可。**建议先放 GitHub Pages**，免费且和代码同仓库。 |
 | 2 | **替换联系邮箱** | `privacy-policy.html` 里有两处 `[请替换为你的联系邮箱]` / `[Replace with your contact email]`，必须换成真实可收信的邮箱，否则审核会退回。 |
-| 3 | **图标** | 商店要求 128×128 PNG 图标，manifest 里目前没有 `icons` 字段，需要补。另需 440×280 及 1400×560 的商店展示图（后者用于精选位，非必需）。 |
+| 3 | **商店素材** | 128×128 图标已在 manifest 声明。商店截图要求 **1280×800（满版，1–5 张）**，已生成 5 张在 `store-assets/`；宣传图 440×280 与精选图 1400×560 是可选项。**注意：440×280 不是商店截图的规格。** |
 
 ---
 
@@ -27,12 +27,12 @@ Region Shot · 区域截图
 
 中文：
 ```
-框选起点和宽度，滚动到终点，把跨多屏的网页区域截成一张完整 PNG。只截你要的那一块，不截整页。
+框选起点和范围，滚动到终点，把跨多屏的网页区域截成一张完整 PNG；还能在图上加文字、箭头和框。
 ```
 
 English:
 ```
-Pick a start point and width, scroll to the end, and capture a multi-screen web region as one PNG. Only the part you select.
+Pick a start point and area, scroll to the end, capture a multi-screen region as a PNG, then annotate with text, arrows and boxes.
 ```
 
 ### 详细描述（中文）
@@ -49,12 +49,13 @@ Region Shot 让你先框出要的那一列，再滚到结束位置，把中间�
 **怎么用**
 
 1. 在网页上点扩展图标，或按 Alt+Shift+S
-2. 按住拖拽，确定截图区域的起点和宽度（按住时拖到屏幕上下边缘会自动滚动）
-3. 松开后，用触摸板或滚轮两指滚动到想结束的位置，选区框会跟着延伸，右下角实时显示当前尺寸
-4. 点右下角「✓ 完成截图」（或点页面任意位置）
-5. 图片自动存到下载文件夹
+2. 按住拖拽，确定截图区域的起点和范围（按住时拖到屏幕四边会自动滚动）
+3. 松开后，用触摸板或滚轮滚动到想结束的位置，选区框会跟着延伸——上下滚就纵向延伸，左右滚就横向延伸，选区右下角实时显示当前尺寸
+4. 点选区右下角的「✓ 完成截图」（或点页面任意位置）；按钮会跟着选区走，滚到哪里都点得到
+5. 截图完成后打开标注编辑器：加文字、箭头、矩形，可拖动、改颜色和字号，⌘Z 撤销
+6. 点「✓ 保存 PNG」存到下载文件夹
 
-任意阶段按 Esc 或点右键取消。
+框选阶段按 Esc 或点右键取消；编辑器里点「取消」或关掉标签页则不保存。
 
 **为触摸板设计**
 
@@ -65,6 +66,7 @@ Mac 触摸板上「按住拖拽」和「两指滚动」没法同时做，所以�
 - 普通整页滚动
 - SPA 那种内部滚动容器（主内容区自己滚，页面本身不动）
 - 正文塞在 iframe 里的文档站
+- 比屏幕宽的页面：宽表格、横向画布、甘特图；选区同时横向和纵向延伸也能正确拼接
 
 扩展会自动判断当前位置该跟随哪个滚动容器。
 
@@ -77,9 +79,9 @@ Mac 触摸板上「按住拖拽」和「两指滚动」没法同时做，所以�
 
 - 只跟随一个滚动容器，跨不同容器不保证正确
 - 跨域 iframe 无法读取内部，退化为只截一屏
-- 固定定位 / sticky 元素可能在每一屏重复出现
 - 懒加载内容可能来不及加载
-- 最长约 30000 设备像素，超出部分截断
+- 长图宽高都限制在约 30000 设备像素内，超出部分截断
+- 横向滚动需要页面本身能横向滚动；`overflow-x: hidden` 的页面，超出的右侧部分截不到
 - 无法截取 chrome:// 页面、Chrome 应用商店页
 ```
 
@@ -124,7 +126,7 @@ Known limitations: follows a single scroll container; cross-origin iframes canno
 表单文本框填入：
 
 ```
-Capture a user-selected rectangular region of the current web page — including content taller than the viewport — and save it as a single PNG image.
+Capture a user-selected rectangular region of the current web page — including content taller than the viewport — annotate it with text, arrows and boxes, and save it as a single PNG image.
 
 Every permission and every line of code serves this one purpose. The extension has no other feature: it does not block ads, modify pages, manage tabs, collect analytics, or sync anything.
 ```
@@ -200,6 +202,15 @@ None. The extension declares no host_permissions. It relies solely on activeTab,
 (Test builds add <all_urls>, but the published package does not.)
 ```
 
+### 标注编辑器页面（1.7.0 新增）
+
+截图完成后会打开 `editor.html` —— 这是扩展自己包内的页面（`chrome-extension://` origin），不是远程页面，也不是内容脚本。
+
+- 打开方式是 `chrome.tabs.create({ url: chrome.runtime.getURL('editor.html?id=…') })`。**`tabs.create` 不需要任何权限**，也没有为此新增 manifest 条目。
+- 编辑器保存后调用 `chrome.tabs.getCurrent` / `chrome.tabs.remove` 关闭自己。官方 [tabs API 文档](https://developer.chrome.com/docs/extensions/reference/api/tabs) 写明 "Most features don't require any permissions to use"，`"tabs"` 权限只控制 `Tab` 的 `url`、`pendingUrl`、`title`、`favIconUrl` 四个敏感字段的读取与查询。当前调用不碰这四个字段，所以**不需要声明 `tabs` 权限**。
+- 结论：**没有因为「打开新标签页 + 本地编辑」新增任何权限，也就没有额外权限理由要写。** 需要在数据使用声明里说明的只有一件事：截图会在扩展自己的 IndexedDB 里做一次临时交接（已写入 §5 的 Website content 用途说明）。
+- 注意：测试脚本 `test/e2e.js` 和 `test/manual-check.js` 会给测试副本额外加 `tabs` 与 `<all_urls>`，那只是为了测试便利，**不要打进提交的 zip**。
+
 ---
 
 ## 4. 远程代码（Remote code）
@@ -237,7 +248,7 @@ All executable code ships inside the extension package. background.js is the onl
 **Website content — how it is used:**
 
 ```
-Read only within the rectangle the user selects, in order to render that region into the PNG the user asked for. The content is processed entirely in browser memory and written to a local file in the user's Downloads folder. It is never transmitted, stored by the extension, or shared.
+Read only within the rectangle the user selects, in order to render that region into the PNG the user asked for. After stitching, the image is written once to the extension's own IndexedDB under a one-time random ID so the annotation editor can open it; the editor deletes that record as soon as it reads it, and the record is deleted immediately if the editor cannot be opened. Nothing is transmitted, uploaded, or shared.
 
 Purpose: app functionality only. Not used for analytics, advertising, personalization, or any purpose unrelated to producing the requested screenshot.
 ```
@@ -272,9 +283,10 @@ No account or credentials are required. Everything runs locally.
 3. In the middle of the article body, press the mouse and drag 200-300px horizontally, then release. A green selection outline appears and a "Done" button appears at the bottom right.
 4. Scroll down with the mouse wheel. The selection outline grows downward and the live dimension indicator updates.
 5. Click the "Done" button once the selection is several screens tall.
-6. A PNG is saved to Downloads. It should contain exactly the region that was selected, with no header or sidebar that was outside the selection.
+6. The annotation editor opens in a new tab with the stitched image. Add some text, an arrow, or a rectangle, then click "Save PNG" (✓ 保存 PNG).
+7. A PNG is saved to Downloads. It should contain exactly the region that was selected, with no header or sidebar that was outside the selection, and it should include the annotations you just drew at the same positions you placed them.
 
-Expected during step 5: Chrome shows its standard "being debugged" infobar. It disappears automatically when the capture completes.
+Expected during steps 3-7: Chrome shows its standard "being debugged" infobar. It disappears automatically when the capture completes.
 
 To verify that nothing is transmitted: open DevTools → Network on any page, run a capture, and observe zero requests originating from the extension. Or simply disconnect from the network — captures still work.
 
@@ -287,8 +299,8 @@ Press Esc or right-click to cancel at any stage.
 
 - [ ] `privacy-policy.html` 已托管到公网 https 地址，且邮箱已替换
 - [ ] 128×128 图标 PNG，manifest 加 `"icons": { "128": "icon128.png" }`
-- [ ] 440×280 商店截图（至少 1 张，最多 5 张）
-- [ ] 5 张截图建议：框选中 / 滚动延伸中 / 完成按钮特写 / 产出的大图 / 三种页面结构的对比
+- [x] 1280×800 商店截图（1–5 张，满版无留白）：`store-assets/screenshot-1.png`（框选）、`screenshot-2.png`（滚动延伸）、`screenshot-3.png`（标注）、`screenshot-4.png`（整图预览）、`screenshot-5.png`（导出长图）
+- [x] 5 张商店截图已补齐（滚动延伸中 / 完成按钮特写未单独出图，第 2、4 张已覆盖这两个卖点）
 - [ ] 打包 zip：`manifest.json`、`background.js`、`icon128.png`（`test/`、`README.md`、`privacy-policy.html` 不必打进去）
 - [ ] 注册 Chrome Web Store 开发者账号（一次性 $5，官方页面：https://chrome.google.com/webstore/devconsole）
 - [ ] 填写 Privacy practices 全部字段（本文件 §2–§5）
@@ -332,10 +344,12 @@ Press Esc or right-click to cancel at any stage.
 | 隐私政策至少说明收集/使用/分享三要素 | User Data FAQ Q7 | 已验证（官方页面） |
 | Limited Use 要求网站上有肯定性声明 | limited-use 政策原文 | 已验证（官方页面） |
 | 代码无远程网络请求 | `grep -nE "fetch\(|XMLHttpRequest|WebSocket"` → 仅 1 处 `fetch(dataUrl)` | 已验证（读代码） |
-| 无存储 | `grep "storage\|localStorage\|indexedDB"` → 无命中 | 已验证（读代码） |
+| 无持久化存储 | 只用一个 IndexedDB 交接截图，编辑器读到即删；无 chrome.storage / localStorage / Cookie | 已验证（读代码） |
 | 唯一 CDP 命令是 `Page.captureScreenshot` | `grep -n "sendCommand"` → 1 处 | 已验证（读代码） |
 | detach 在 finally 里 | background.js 的 `runCapture` | 已验证（读代码） |
-| 截图后恢复滚动位置 | `scrollToOffset(tab.id, ..., sel.scrollStart)` | 已验证（读代码） |
+| 截图后恢复滚动位置 | `scrollToPosition(tab.id, ..., sel.scrollStart, sel.scrollStartX)` | 已验证（读代码 + e2e） |
 | manifest 无 host_permissions | manifest.json 实际内容 | 已验证（读代码） |
+| 商店截图为 1280×800 或 640×400，1–5 张，满版 | 官方 [Store images](https://developer.chrome.com/docs/webstore/images) 页面 | 已验证（官方页面，2026-11-18 抓取） |
+| `chrome.tabs.getCurrent/remove` 不需要 `tabs` 权限 | 官方 tabs API 文档："Most features don't require any permissions to use" | 已验证（官方页面，2026-11-18 抓取） |
 | debugger 权限有额外审核 | — | **未核**（未找到官方明文，仅社区说法） |
 | 注册费 $5 | 官方 devconsole 页面 | **未核**（本会话未逐字核对金额，提交前请自己看一眼页面） |

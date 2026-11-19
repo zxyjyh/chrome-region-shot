@@ -112,13 +112,14 @@
 </table>
 
 <h2>3. 数据如何被使用</h2>
-<p>只有一个用途：生成你要的那张截图。具体过程是：扩展控制页面逐屏滚动，每屏截取选区范围内的画面，在浏览器后台把多张画面拼接成一张完整图片，然后保存为 PNG 文件。</p>
-<p>截图开始前，扩展会记录当前的滚动位置；截图完成后会把页面滚动位置恢复回去。<strong>截图期间你会看到页面自动上下滚动，这是功能的固有行为，不是采集行为。</strong></p>
+<p>只有一个用途：生成你要的那张截图。具体过程是：扩展控制页面逐屏滚动，每屏截取选区范围内的画面，在浏览器后台把多张画面拼接成一张完整图片，随后在扩展自己的页面里提供标注功能，你确认后再保存为 PNG 文件。</p>
+<p>截图开始前，扩展会记录当前的滚动位置；截图完成后会把页面滚动位置恢复回去。<strong>截图期间你会看到页面自动上下或左右滚动，这是功能的固有行为，不是采集行为。</strong></p>
 
 <h2>4. 数据存储与保留</h2>
 <ul>
-  <li><strong>扩展本身不存储任何数据。</strong>它没有使用 <code>chrome.storage</code>、<code>localStorage</code>、IndexedDB 或 Cookie。卸载扩展不会丢失任何属于你的东西，因为它本来就没存。</li>
-  <li>截图过程中的画面数据只存在于内存中，图片生成后即被释放。</li>
+  <li><strong>截图只在扩展内部短暂交接一次，随即删除。</strong>拼接完成后，PNG 会用一个一次性的随机 ID 写入扩展自身来源（origin）下的 IndexedDB，交给紧接打开的标注编辑器读取；编辑器读到数据的同一时刻就删除这条记录。其他网站页面、其他扩展都访问不到这份数据。</li>
+  <li>如果标注编辑器没能打开（例如标签页创建失败），扩展会立即删除这条记录并改为直接保存原图——不会留下无人读取的副本。</li>
+  <li>除此之外不使用任何持久化存储：没有 <code>chrome.storage</code>、<code>localStorage</code>、Cookie。标注内容（文字、箭头、矩形）只存在于编辑器页面的内存中，关闭页面即消失。</li>
   <li>最终生成的 PNG 文件保存在你自己的下载文件夹，由你自行决定保留、移动或删除。扩展不会再次读取它。</li>
 </ul>
 
@@ -236,13 +237,14 @@ The use of information received from Google APIs will adhere to the Chrome Web S
 </table>
 
 <h2>3. How data is used</h2>
-<p>For one purpose only: producing the screenshot you asked for. The extension scrolls the page one screen at a time, captures the selected area on each screen, stitches the screens into a single image in the background, and saves it as a PNG file.</p>
+<p>For one purpose only: producing the screenshot you asked for. The extension scrolls the page one screen at a time, captures the selected area on each screen, stitches the screens into a single image in the background, then opens its own annotation page so you can add markings before saving the PNG file.</p>
 <p>Before capturing, the extension records the current scroll position and restores it when finished. <strong>You will see the page scroll by itself during the capture; this is inherent to how the feature works, not a form of collection.</strong></p>
 
 <h2>4. Storage and retention</h2>
 <ul>
-  <li><strong>The extension stores no data.</strong> It does not use <code>chrome.storage</code>, <code>localStorage</code>, IndexedDB, or cookies. Uninstalling it loses nothing of yours, because nothing of yours was ever stored.</li>
-  <li>In-progress image data exists only in memory and is released once the PNG is generated.</li>
+  <li><strong>The screenshot is handed over once, inside the extension, and deleted immediately.</strong> After stitching, the PNG is written to IndexedDB under the extension's own origin with a one-time random ID, so the annotation editor that opens next can read it. The editor deletes that record the moment it reads it. No website page and no other extension can reach this data.</li>
+  <li>If the annotation editor fails to open (for example, the tab cannot be created), the extension deletes the record immediately and saves the original image directly instead — no unread copy is left behind.</li>
+  <li>No other persistent storage is used: no <code>chrome.storage</code>, no <code>localStorage</code>, no cookies. Annotations (text, arrows, rectangles) exist only in the editor page's memory and disappear when the page closes.</li>
   <li>The resulting PNG is saved to your own Downloads folder. You decide whether to keep, move, or delete it. The extension never reads it again.</li>
 </ul>
 

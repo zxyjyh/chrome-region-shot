@@ -10,8 +10,11 @@
 //   2. 截图阶段由扩展自己把这个容器一屏一屏滚过去，每屏截一次，最后拼成一张
 //   3. 两种滚动方式走同一条代码路径
 
-const MAX_TOTAL_DEVICE = 30000; // 最终画布的设备像素高度上限
+const MAX_TOTAL_DEVICE = 30000; // 最终画布单边的设备像素上限
+const MAX_CANVAS_PIXELS = 16384 * 16384; // Chrome 画布的面积上限，超了会直接创建失败
 const SCROLL_SETTLE_MS = 250; // 每屏滚动后等待渲染的时间
+const SHOT_DB = 'region-shot'; // 与 editor.js 里的常量保持一致
+const SHOT_STORE = 'shots';
 
 chrome.action.onClicked.addListener((tab) => {
   runCapture(tab).catch((err) => {
@@ -47,7 +50,9 @@ async function runCapture(tab) {
     // 1) 选区（返回的是「滚动容器的内容坐标」）
     let sel;
     try {
-      sel = await execResult(tab.id, selectionOverlay);
+      sel = await execResult(tab.id, selectionOverlay, [
+        'v' + chrome.runtime.getManifest().version,
+      ]);
     } catch (e) {
       console.warn('[RegionShot] 注入选区失败', e);
       setBadge(tab.id, '!', '#dc2626');
@@ -80,112 +85,250 @@ async function captureByScroll(tab, target, sel) {
   if (!geo0) throw new Error('找不到滚动容器');
 
   const dpr = geo0.dpr || 1;
+  const contentW = geo0.scrollW || geo0.viewportW;
   const contentH = geo0.scrollH;
+  const totalW = Math.min(sel.w, contentW - sel.x, MAX_TOTAL_DEVICE / dpr);
   const totalH = Math.min(sel.h, contentH - sel.y, MAX_TOTAL_DEVICE / dpr);
 
-  console.log('[RegionShot] 滚动参数', JSON.stringify({ sel, geo0, contentH, totalH }));
+  console.log('[RegionShot] 滚动参数', JSON.stringify({ sel, geo0, contentW, contentH, totalW, totalH }));
 
   if (totalH <= 1) throw new Error('选区没有有效高度（内容高度 ' + contentH + '，起点 ' + sel.y + '）');
+  if (totalW <= 1) throw new Error('选区没有有效宽度（内容宽度 ' + contentW + '，起点 ' + sel.x + '）');
 
-  // 不用预计算分段：每屏能截多高取决于当下真实的视口高度，
-  // 按「实际截到的高度」推进才能保证不漏内容
+  // 先横向铺完一行，再纵向推进到下一条带。不预计算分段：
+  // 每屏能截多宽/多高取决于当下真实的视口尺寸，按实际截到的尺寸推进才不会漏内容。
   const endY = Math.round(sel.y + totalH);
-  let pos = Math.round(sel.y);
+  const endX = Math.round(sel.x + totalW);
+  let py = Math.round(sel.y);
   let stage = null;
   let ctx = null;
-  let drawn = 0;
+  let drawnY = 0; // 已绘制的设备像素高度
+  let maxX = 0; // 已绘制到的设备像素宽度
+  let scale = dpr; // 设备像素 / CSS 像素，用第一张截图校准
   let i = 0;
 
-  while (pos < endY && i++ < 500) {
-    setBadge(tab.id, `${Math.min(99, Math.round(((pos - sel.y) / totalH) * 100))}%`);
-
-    await execResult(tab.id, scrollToOffset, [sel.kind, pos]);
-    await execResult(tab.id, waitFrames);
-    await sleep(SCROLL_SETTLE_MS);
-
-    const g = await execResult(tab.id, readGeo, [sel.kind]);
-    if (!g) throw new Error('滚动容器消失了');
-
-    // 实际滚动位置可能被 clamp（已经到底），据此修正这一屏从哪开始截
-    const lead = Math.max(0, pos - g.scrollTop);
-    const avail = g.viewportH - lead;
-    const h = Math.min(endY - pos, avail);
-
-    if (h <= 2) {
-      console.warn('[RegionShot] 无法继续滚动，提前结束', {
-        pos,
-        scrollTop: g.scrollTop,
-        viewportH: g.viewportH,
-      });
-      break;
+  // 吸顶的导航栏会被逐屏拍进去，截图期间先藏起来
+  let floating = 0;
+  try {
+    floating = await execResult(tab.id, hideFloating, [sel.kind]);
+    if (floating) {
+      console.log('[RegionShot] 隐藏吸顶元素', floating);
+      await execResult(tab.id, waitFrames);
+      await sleep(80);
     }
-
-    // 内容坐标 → 文档坐标
-    const dx = sel.x - g.scrollLeft;
-    const xDoc = g.viewportLeftDoc + dx;
-    const wDoc = Math.min(sel.w, g.viewportW - dx);
-
-    if (wDoc <= 2) {
-      console.warn('[RegionShot] 选区宽度越界', { sel, g });
-      break;
-    }
-
-    const shot = await chrome.debugger.sendCommand(target, 'Page.captureScreenshot', {
-      format: 'png',
-      clip: {
-        x: xDoc,
-        y: g.viewportTopDoc + lead,
-        width: wDoc,
-        height: h,
-        // 坐标是 CSS 像素；Chrome 会自动按设备像素比输出，
-        // 这里不能再乘 dpr，否则 Retina 屏上会被放大两次
-        scale: 1,
-      },
-    });
-
-    const bitmap = await createImageBitmap(dataUrlToBlob('data:image/png;base64,' + shot.data));
-
-    if (!stage) {
-      const scaleY = bitmap.height / h;
-      const totalPx = Math.ceil(totalH * scaleY);
-      stage = new OffscreenCanvas(bitmap.width, Math.min(totalPx, MAX_TOTAL_DEVICE));
-      ctx = stage.getContext('2d');
-    }
-
-    // 这一屏实际覆盖的内容高度（正常情况下等于 h）
-    let advance = h;
-    try {
-      const drawH = Math.min(bitmap.height, stage.height - drawn);
-      if (drawH <= 0) break;
-      ctx.drawImage(bitmap, 0, 0, bitmap.width, drawH, 0, drawn, bitmap.width, drawH);
-      drawn += drawH;
-      advance = h * (drawH / bitmap.height);
-    } finally {
-      bitmap.close();
-    }
-
-    pos += Math.round(advance);
-    if (drawn >= stage.height) break;
+  } catch (e) {
+    console.warn('[RegionShot] 隐藏吸顶元素失败', e);
   }
 
-  if (!stage || drawn <= 0) throw new Error('没有可保存的内容');
+  try {
+    while (py < endY && i++ < 500) {
+      setBadge(tab.id, `${Math.min(99, Math.round(((py - sel.y) / totalH) * 100))}%`);
+
+      let px = Math.round(sel.x);
+      let drawnX = 0; // 本行已绘制的设备像素宽度
+      let rowH = 0; // 本行可覆盖的 CSS 高度
+      let painted = false;
+
+      while (px < endX && i++ < 4000) {
+        await execResult(tab.id, scrollToPosition, [sel.kind, py, px]);
+        await execResult(tab.id, waitFrames);
+        await sleep(SCROLL_SETTLE_MS);
+
+        const g = await execResult(tab.id, readGeo, [sel.kind]);
+        if (!g) throw new Error('滚动容器消失了');
+
+        // 实际滚动位置可能被 clamp（已经到边界），据此修正这一屏从哪开始截
+        const leadY = Math.max(0, py - g.scrollTop);
+        const leadX = Math.max(0, px - g.scrollLeft);
+        const availH = g.viewportH - leadY;
+        const availW = g.viewportW - leadX;
+        const h = Math.min(endY - py, availH);
+        const w = Math.min(endX - px, availW);
+
+        if (h <= 2) {
+          console.warn('[RegionShot] 无法继续纵向滚动，提前结束', {
+            py,
+            scrollTop: g.scrollTop,
+            viewportH: g.viewportH,
+          });
+          break;
+        }
+        if (w <= 2) {
+          // 这一行已经横向到头（页面不支持横向滚动，或内容宽度不够）
+          if (!painted) {
+            console.warn('[RegionShot] 选区宽度越界', { sel, g });
+          }
+          break;
+        }
+
+        // 内容坐标 → 文档坐标
+        const xDoc = g.viewportLeftDoc + leadX;
+        const yDoc = g.viewportTopDoc + leadY;
+
+        const shot = await chrome.debugger.sendCommand(target, 'Page.captureScreenshot', {
+          format: 'png',
+          clip: {
+            x: xDoc,
+            y: yDoc,
+            width: w,
+            height: h,
+            // 坐标是 CSS 像素；Chrome 会自动按设备像素比输出，
+            // 这里不能再乘 dpr，否则 Retina 屏上会被放大两次
+            scale: 1,
+          },
+        });
+
+        const bitmap = await createImageBitmap(dataUrlToBlob('data:image/png;base64,' + shot.data));
+
+        if (!stage) {
+          scale = bitmap.width / w;
+          let canvasW = Math.min(Math.ceil(totalW * scale), MAX_TOTAL_DEVICE);
+          let canvasH = Math.min(Math.ceil(totalH * scale), MAX_TOTAL_DEVICE);
+          // 单边没超、面积超了也会创建失败，按面积等比缩一次
+          if (canvasW * canvasH > MAX_CANVAS_PIXELS) {
+            const k = Math.sqrt(MAX_CANVAS_PIXELS / (canvasW * canvasH));
+            canvasW = Math.max(1, Math.floor(canvasW * k));
+            canvasH = Math.max(1, Math.floor(canvasH * k));
+          }
+          try {
+            stage = new OffscreenCanvas(canvasW, canvasH);
+            ctx = stage.getContext('2d');
+          } catch (e) {
+            bitmap.close();
+            throw new Error('画布过大（' + canvasW + '×' + canvasH + '），无法拼接');
+          }
+        }
+
+        // 这一屏实际覆盖的内容宽高（正常情况下等于 w / h）
+        let advanceW = w;
+        let advanceH = h;
+        try {
+          const dstX = Math.round(drawnX);
+          const dstY = Math.round(drawnY);
+          const drawW = Math.min(bitmap.width, stage.width - dstX);
+          const drawH = Math.min(bitmap.height, stage.height - dstY);
+          if (drawW <= 0 || drawH <= 0) break;
+          ctx.drawImage(bitmap, 0, 0, drawW, drawH, dstX, dstY, drawW, drawH);
+          drawnX += drawW;
+          maxX = Math.max(maxX, drawnX);
+          advanceW = w * (drawW / bitmap.width);
+          advanceH = h * (drawH / bitmap.height);
+          painted = true;
+        } finally {
+          bitmap.close();
+        }
+
+        px += Math.max(1, Math.round(advanceW));
+        rowH = Math.max(rowH, Math.round(advanceH));
+        if (drawnX >= stage.width) break;
+      }
+
+      if (!painted || rowH <= 0) break;
+      drawnY += Math.round(rowH * scale);
+      py += rowH;
+      if (drawnY >= stage.height) break;
+    }
+  } finally {
+    if (floating) {
+      try {
+        await execResult(tab.id, restoreFloating, [sel.kind]);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  if (!stage || drawnY <= 0 || maxX <= 0) throw new Error('没有可保存的内容');
 
   // 恢复页面原来的滚动位置
   try {
-    await execResult(tab.id, scrollToOffset, [sel.kind, sel.scrollStart || 0]);
+    await execResult(tab.id, scrollToPosition, [
+      sel.kind,
+      sel.scrollStart || 0,
+      sel.scrollStartX || 0,
+    ]);
   } catch {
     /* ignore */
   }
 
+  const usedH = Math.min(stage.height, Math.round(drawnY));
+  const usedW = Math.min(stage.width, Math.round(maxX));
   let finalCanvas = stage;
-  if (drawn < stage.height) {
-    finalCanvas = new OffscreenCanvas(stage.width, drawn);
+  if (usedH < stage.height || usedW < stage.width) {
+    finalCanvas = new OffscreenCanvas(Math.max(1, usedW), Math.max(1, usedH));
     finalCanvas.getContext('2d').drawImage(stage, 0, 0);
   }
 
   const blob = await finalCanvas.convertToBlob({ type: 'image/png' });
-  const dataUrl = await blobToDataUrl(blob);
-  await saveWithFallback(tab, dataUrl, `region-${stamp()}.png`);
+  const filename = `region-${stamp()}.png`;
+
+  // 截图先交给标注编辑器：用户可以在图上加文字/箭头/矩形，确认后再下载。
+  // 编辑器打不开（比如 IndexedDB 不可用）就退回原来的直接保存，不让功能退化成失败。
+  try {
+    await openEditor(blob, filename);
+    setBadge(tab.id, 'OK');
+    setTimeout(() => setBadge(tab.id, ''), 2500);
+  } catch (e) {
+    console.warn('[RegionShot] 打开标注编辑器失败，直接保存原图', e);
+    await saveWithFallback(tab, await blobToDataUrl(blob), filename);
+  }
+}
+
+// 把截图交给 editor.html：写进 IndexedDB（service worker 与扩展页面同一 origin 共享），
+// 页面读出来后自行删除。用一次性 id 而不是固定 key，连续截几张也不会互相覆盖。
+async function openEditor(blob, filename) {
+  const id = crypto.randomUUID();
+  const db = await openShotDB();
+  try {
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(SHOT_STORE, 'readwrite');
+      tx.objectStore(SHOT_STORE).put(blob, id);
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error || new Error('写入截图数据被中止'));
+    });
+  } finally {
+    db.close();
+  }
+
+  const url =
+    chrome.runtime.getURL('editor.html') +
+    `?id=${encodeURIComponent(id)}&name=${encodeURIComponent(filename)}`;
+  try {
+    await chrome.tabs.create({ url, active: true });
+  } catch (e) {
+    // 标签页没打开就没人来取这份原图，别让它留在本地
+    await dropShot(id);
+    throw e;
+  }
+}
+
+async function dropShot(id) {
+  try {
+    const db = await openShotDB();
+    await new Promise((resolve) => {
+      const tx = db.transaction(SHOT_STORE, 'readwrite');
+      tx.objectStore(SHOT_STORE).delete(id);
+      tx.oncomplete = resolve;
+      tx.onerror = resolve;
+      tx.onabort = resolve;
+    });
+    db.close();
+  } catch {
+    /* ignore */
+  }
+}
+
+function openShotDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(SHOT_DB, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(SHOT_STORE)) db.createObjectStore(SHOT_STORE);
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
 }
 
 async function saveWithFallback(tab, dataUrl, filename) {
@@ -304,6 +447,7 @@ function readGeo(kind) {
       scrollTop: se.scrollTop,
       scrollLeft: se.scrollLeft,
       scrollH: se.scrollHeight,
+      scrollW: se.scrollWidth,
       viewportTopDoc: visTop + window.scrollY,
       viewportLeftDoc: r.left + window.scrollX,
       viewportH: Math.max(0, visBottom - visTop),
@@ -330,6 +474,7 @@ function readGeo(kind) {
     scrollTop: isDoc ? window.scrollY : el.scrollTop,
     scrollLeft: isDoc ? window.scrollX : el.scrollLeft,
     scrollH: el.scrollHeight,
+    scrollW: el.scrollWidth,
     viewportTopDoc: isDoc ? window.scrollY : visTop + window.scrollY,
     viewportLeftDoc: isDoc ? window.scrollX : r.left + window.scrollX,
     viewportH: Math.max(0, visBottom - visTop),
@@ -338,10 +483,11 @@ function readGeo(kind) {
   };
 }
 
-// 把滚动容器移到指定位置
-function scrollToOffset(kind, offset) {
+// 把滚动容器移到指定位置（横向 + 纵向）
+function scrollToPosition(kind, top, left) {
   const SCROLLER = 'data-region-shot-scroller';
   const FRAME = 'data-region-shot-frame';
+  const hasLeft = typeof left === 'number' && Number.isFinite(left);
 
   if (kind === 'iframe') {
     const f = document.querySelector('[' + FRAME + ']');
@@ -354,7 +500,8 @@ function scrollToOffset(kind, offset) {
     }
     const se = d && (d.scrollingElement || d.documentElement);
     if (!se) return false;
-    se.scrollTop = offset;
+    if (hasLeft) se.scrollLeft = left;
+    se.scrollTop = top;
     return true;
   }
 
@@ -364,7 +511,8 @@ function scrollToOffset(kind, offset) {
       : document.querySelector('[' + SCROLLER + ']');
 
   if (!el) return false;
-  el.scrollTop = offset;
+  if (hasLeft) el.scrollLeft = left;
+  el.scrollTop = top;
   return true;
 }
 
@@ -373,6 +521,74 @@ function waitFrames() {
   return new Promise((resolve) => {
     requestAnimationFrame(() => requestAnimationFrame(() => resolve(true)));
   });
+}
+
+// 截图期间隐藏 fixed / sticky 元素
+//
+// 每屏的裁剪区从视口顶部开始，吸顶的导航栏会被完整拍进每一屏：既在长图里
+// 重复出现，又把它盖住的正文一起抹掉。截图期间设为 hidden（不影响布局），
+// 截完恢复原值。
+function hideFloating(kind) {
+  const FRAME = 'data-region-shot-frame';
+  const docs = [document];
+  if (kind === 'iframe') {
+    const f = document.querySelector('[' + FRAME + ']');
+    try {
+      if (f && f.contentDocument) docs.push(f.contentDocument);
+    } catch {
+      /* 跨域 iframe 拿不到 */
+    }
+  }
+
+  let n = 0;
+  for (const d of docs) {
+    const win = d.defaultView || window;
+    let all;
+    try {
+      all = d.querySelectorAll('*');
+    } catch {
+      continue;
+    }
+    for (const el of all) {
+      if (el.hasAttribute('data-region-shot-float')) continue;
+      let pos = '';
+      try {
+        pos = win.getComputedStyle(el).position;
+      } catch {
+        continue;
+      }
+      if (pos !== 'fixed' && pos !== 'sticky') continue;
+      el.setAttribute('data-region-shot-float', el.style.getPropertyValue('visibility'));
+      el.style.setProperty('visibility', 'hidden', 'important');
+      n++;
+    }
+  }
+  return n;
+}
+
+function restoreFloating(kind) {
+  const FRAME = 'data-region-shot-frame';
+  const docs = [document];
+  if (kind === 'iframe') {
+    const f = document.querySelector('[' + FRAME + ']');
+    try {
+      if (f && f.contentDocument) docs.push(f.contentDocument);
+    } catch {
+      /* 跨域 iframe 拿不到 */
+    }
+  }
+
+  let n = 0;
+  for (const d of docs) {
+    d.querySelectorAll('[data-region-shot-float]').forEach((el) => {
+      const v = el.getAttribute('data-region-shot-float');
+      if (v) el.style.setProperty('visibility', v, 'important');
+      else el.style.removeProperty('visibility');
+      el.removeAttribute('data-region-shot-float');
+      n++;
+    });
+  }
+  return n;
 }
 
 function clearMark() {
@@ -385,7 +601,7 @@ function clearMark() {
   return true;
 }
 
-function selectionOverlay() {
+function selectionOverlay(ver) {
   return new Promise((resolve) => {
     const ID = '__region_shot_overlay__';
     const MARK = 'data-region-shot-scroller';
@@ -458,6 +674,19 @@ function selectionOverlay() {
       return { x: clientX + window.scrollX, y: clientY + window.scrollY };
     };
 
+    // 读取目标容器当前的滚动位置
+    const readScroll = () => {
+      const t = target;
+      if (t && t.kind === 'iframe') {
+        const se = t.doc.scrollingElement || t.doc.documentElement;
+        return { x: se.scrollLeft, y: se.scrollTop };
+      }
+      if (t && t.kind === 'element') {
+        return { x: t.el.scrollLeft, y: t.el.scrollTop };
+      }
+      return { x: window.scrollX, y: window.scrollY };
+    };
+
     const root = document.createElement('div');
     root.id = ID;
     root.style.cssText = [
@@ -482,7 +711,7 @@ function selectionOverlay() {
     ].join(';');
 
     const tip = document.createElement('div');
-    tip.textContent = 'v1.6.0 · 第一步：拖拽确定起点和宽度';
+    tip.textContent = ver + ' · 第一步：拖拽确定起点和范围';
     tip.style.cssText = [
       'position:fixed',
       'z-index:2147483647',
@@ -498,13 +727,17 @@ function selectionOverlay() {
       'white-space:nowrap',
     ].join(';');
 
-    // 右下角实时尺寸读数：第二阶段选框顶部会滚出视口，没有这个看不出选了多少
+    // 选区右下角实时尺寸读数：第二阶段选框顶部会滚出视口，没有这个看不出选了多少。
+    // 固定宽度，避免滚动时读 offsetWidth 触发重排（见 placeConfirm）
     const info = document.createElement('div');
     info.style.cssText = [
       'position:fixed',
       'right:24px',
       'bottom:76px',
       'z-index:2147483646',
+      'width:128px',
+      'box-sizing:border-box',
+      'text-align:center',
       'padding:6px 12px',
       'background:rgba(17,24,39,0.92)',
       'color:#fff',
@@ -523,12 +756,67 @@ function selectionOverlay() {
     let startContentX = 0;
     let startContentY = 0;
     let fixedWidth = 0;
+    let fixedHeight = 0;
+    let anchorEndX = 0; // 进入第二阶段时的选区右下角（内容坐标）
+    let anchorEndY = 0;
+    let baseScrollX = 0; // 进入第二阶段时的滚动位置，用来算滚动增量
+    let baseScrollY = 0;
     let lastClientX = 0;
     let lastClientY = 0;
     let current = { x: 0, y: 0, w: 0, h: 0 };
     let autoTimer = null;
     let confirmBtn = null;
+    let btnBox = { w: 0, h: 0 }; // 按钮尺寸测量一次缓存，滚动时不再读布局
+    let scrollRaf = 0;
     let phaseAt = 0;
+
+    // 完成按钮和尺寸读数贴着选区右下角走；选区滚出视口时 clamp 到视口边缘，
+    // 保证按钮永远点得到，又不会离用户正在看的地方太远。
+    //
+    // 注意：这里不能每帧读 offsetWidth。滚动事件每帧都会走到这里，读布局 + 写样式
+    // 来回切换会造成 layout thrashing，长页面上滚动手感会垮掉。按钮尺寸测量一次就缓存，
+    // 尺寸读数用固定宽度（文字是数字，宽度稳定）。
+    const INFO_W = 128;
+    const placeConfirm = (sx, sy) => {
+      const GAP = 10;
+      const EDGE = 8;
+      const RIGHT_PAD = 24; // 给右侧滚动条留位置，否则拖滚动条会点到按钮
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+
+      if (confirmBtn) {
+        const btnW = btnBox.w;
+        const btnH = btnBox.h;
+        let left = sx + current.w + GAP;
+        let top = sy + current.h + GAP;
+        // 外侧放不下就挪到选区内侧，避免被视口裁掉
+        if (left + btnW > vw - RIGHT_PAD) left = sx + current.w - btnW - GAP;
+        if (top + btnH > vh - EDGE) top = sy + current.h - btnH - GAP;
+        left = Math.max(EDGE, Math.min(left, vw - btnW - RIGHT_PAD));
+        top = Math.max(EDGE, Math.min(top, vh - btnH - EDGE));
+        Object.assign(confirmBtn.style, {
+          left: `${left}px`,
+          top: `${top}px`,
+          right: 'auto',
+          bottom: 'auto',
+        });
+      }
+
+      if (info.style.display === 'block') {
+        const infoH = 30; // padding 6×2 + 13px 行高，固定值，不读布局
+        let left = sx + current.w - INFO_W;
+        let top = sy + current.h + GAP;
+        if (confirmBtn) top = (parseFloat(confirmBtn.style.top) || 0) - infoH - 8;
+        left = Math.max(EDGE, Math.min(left, vw - INFO_W - RIGHT_PAD));
+        top = Math.max(EDGE, Math.min(top, vh - infoH - EDGE));
+        Object.assign(info.style, {
+          left: `${left}px`,
+          top: `${top}px`,
+          right: 'auto',
+          bottom: 'auto',
+        });
+      }
+    };
 
     // 选框用 fixed + 屏幕坐标绘制（目标滚动时由 update 负责重算）
     const paint = () => {
@@ -559,6 +847,7 @@ function selectionOverlay() {
         info.style.display = 'block';
         info.textContent = `${Math.round(current.w)} × ${Math.round(current.h)} px`;
       }
+      placeConfirm(sx, sy);
     };
 
     const updateDragging = (clientX, clientY) => {
@@ -572,15 +861,21 @@ function selectionOverlay() {
       paint();
     };
 
-    // 第二阶段：x 和顶部固定，底部跟随鼠标在容器内容中的位置（滚动时自动延伸）
-    const updateAdjusting = (clientX, clientY) => {
-      const cur = contentPoint(clientX, clientY);
-      const top = Math.min(startContentY, cur.y);
-      const bottom = Math.max(startContentY, cur.y);
+    // 第二阶段：起点和框选尺寸固定，右下角只跟滚动走。
+    // 这里刻意不读鼠标位置——按钮贴在选区右下角，如果选区跟着鼠标跑，
+    // 鼠标一靠近按钮选区就把按钮推走，永远点不中。
+    const updateAdjusting = () => {
+      const s = readScroll();
+      const endX = anchorEndX + (s.x - baseScrollX);
+      const endY = anchorEndY + (s.y - baseScrollY);
+      const left = Math.min(startContentX, endX);
+      const right = Math.max(startContentX + fixedWidth, endX);
+      const top = Math.min(startContentY, endY);
+      const bottom = Math.max(startContentY + fixedHeight, endY);
       current = {
-        x: startContentX,
+        x: left,
         y: top,
-        w: fixedWidth,
+        w: right - left,
         h: bottom - top,
       };
       paint();
@@ -593,10 +888,12 @@ function selectionOverlay() {
       }
     };
 
-    // 拖到视口上下边缘时自动滚动（第一阶段用）
-    const edgeScroll = (clientY) => {
+    // 拖到视口四边时自动滚动（第一阶段用，支持横向和纵向）
+    const edgeScroll = (clientX, clientY) => {
       const EDGE = 60;
+      const vw = window.innerWidth;
       const vh = window.innerHeight;
+      let dx = 0;
       let dy = 0;
 
       if (clientY > vh - EDGE) {
@@ -604,8 +901,13 @@ function selectionOverlay() {
       } else if (clientY < EDGE) {
         dy = -Math.max(4, Math.round((EDGE - clientY) / 4));
       }
+      if (clientX > vw - EDGE) {
+        dx = Math.max(4, Math.round((clientX - (vw - EDGE)) / 4));
+      } else if (clientX < EDGE) {
+        dx = -Math.max(4, Math.round((EDGE - clientX) / 4));
+      }
 
-      if (dy === 0) {
+      if (dx === 0 && dy === 0) {
         stopAuto();
         return;
       }
@@ -616,10 +918,12 @@ function selectionOverlay() {
           if (t && t.kind === 'iframe') {
             const se = t.doc.scrollingElement || t.doc.documentElement;
             se.scrollTop += dy;
+            se.scrollLeft += dx;
           } else if (t && t.kind === 'element') {
             t.el.scrollTop += dy;
+            t.el.scrollLeft += dx;
           } else {
-            window.scrollBy(0, dy);
+            window.scrollBy(dx, dy);
           }
           if (phase === 1) updateDragging(lastClientX, lastClientY);
         }, 16);
@@ -636,7 +940,8 @@ function selectionOverlay() {
       document.removeEventListener('keydown', onKey, true);
       root.removeEventListener('mousedown', onDown);
       root.removeEventListener('contextmenu', onContext);
-      document.removeEventListener('mousedown', onConfirm, true);
+      document.removeEventListener('mousedown', onAnyDown, true);
+      document.removeEventListener('mouseup', onAnyUp, true);
       if (confirmBtn) {
         confirmBtn.remove();
         confirmBtn = null;
@@ -665,21 +970,25 @@ function selectionOverlay() {
       }
 
       let scrollStart = 0;
+      let scrollStartX = 0;
       try {
         const t = target;
         if (t && t.kind === 'iframe') {
           const se = t.doc.scrollingElement || t.doc.documentElement;
           scrollStart = se.scrollTop;
+          scrollStartX = se.scrollLeft;
         } else if (t && t.kind === 'element') {
           scrollStart = t.el.scrollTop;
+          scrollStartX = t.el.scrollLeft;
         } else {
           scrollStart = window.scrollY;
+          scrollStartX = window.scrollX;
         }
       } catch {
         /* ignore */
       }
 
-      resolve({ ...result, kind: target ? target.kind : 'doc', scrollStart });
+      resolve({ ...result, kind: target ? target.kind : 'doc', scrollStart, scrollStartX });
     };
 
     const onKey = (e) => {
@@ -700,12 +1009,12 @@ function selectionOverlay() {
 
     const onDown = (e) => {
       if (e.button !== 0) return;
-      e.preventDefault();
 
       if (phase === 2) {
         doConfirm();
         return;
       }
+      e.preventDefault();
       if (phase !== 0) return;
 
       // 在按下的位置探测真正在滚动的目标
@@ -738,25 +1047,50 @@ function selectionOverlay() {
 
       if (phase === 1) {
         updateDragging(e.clientX, e.clientY);
-        edgeScroll(e.clientY);
-      } else if (phase === 2) {
-        updateAdjusting(e.clientX, e.clientY);
+        edgeScroll(e.clientX, e.clientY);
       }
+      // 第二阶段不响应鼠标移动：选区只跟滚动延伸，见 updateAdjusting
     };
 
-    // 第二阶段点击任意位置确认
-    const onConfirm = (e) => {
+    // 第二阶段：按下时只记录位置，不拦默认行为——否则拖滚动条、拖页面、
+    // 选中文字都会被当成「点任意位置确认」，用户会觉得页面拖不动。
+    // 是否是"点击确认"留到松手时按位移判断。
+    let pressX = 0;
+    let pressY = 0;
+    let pressed = false;
+
+    const onAnyDown = (e) => {
       if (phase !== 2) return;
+      pressed = true;
+      pressX = e.clientX;
+      pressY = e.clientY;
+    };
+
+    const onAnyUp = (e) => {
+      if (phase !== 2 || !pressed) return;
+      pressed = false;
       if (Date.now() - phaseAt < 200) return;
+      // 右侧滚动条区域交给浏览器，别把拖动滚动条当成确认
+      if (e.clientX > window.innerWidth - 24) return;
+      // 拖动超过 6px 就不是点击，不确认
+      if (Math.abs(e.clientX - pressX) > 6 || Math.abs(e.clientY - pressY) > 6) return;
       e.preventDefault();
       e.stopPropagation();
       doConfirm();
     };
 
-    // 滚动时刷新选框（容器滚动也要跟着走）
+    // 滚动时刷新选框（容器滚动也要跟着走）。
+    // 用 rAF 合并：惯性滚动一帧可能触发好几次 scroll，每次都重排会拖垮手感。
     const onScroll = () => {
-      if (phase === 1) updateDragging(lastClientX, lastClientY);
-      else if (phase === 2) updateAdjusting(lastClientX, lastClientY);
+      if (phase === 1) {
+        updateDragging(lastClientX, lastClientY);
+        return;
+      }
+      if (phase !== 2 || scrollRaf) return;
+      scrollRaf = requestAnimationFrame(() => {
+        scrollRaf = 0;
+        if (phase === 2) updateAdjusting();
+      });
     };
 
     const onUp = (e) => {
@@ -773,11 +1107,17 @@ function selectionOverlay() {
       phase = 2;
       phaseAt = Date.now();
       fixedWidth = current.w;
+      fixedHeight = current.h;
       startContentX = current.x;
       startContentY = current.y;
+      anchorEndX = current.x + current.w;
+      anchorEndY = current.y + current.h;
+      const s0 = readScroll();
+      baseScrollX = s0.x;
+      baseScrollY = s0.y;
       box.style.borderColor = '#10b981';
       root.style.background = 'rgba(0,0,0,0.06)';
-      tip.textContent = 'v1.6.0 · 第二步：滚动到结束位置，点右下角「完成截图」或页面任意位置 · Esc 取消';
+      tip.textContent = ver + ' · 第二步：上下或左右滚动到结束位置，点「完成截图」或页面任意位置 · Esc 取消';
 
       root.style.pointerEvents = 'none';
 
@@ -805,12 +1145,15 @@ function selectionOverlay() {
         doConfirm();
       });
       document.documentElement.appendChild(confirmBtn);
+      btnBox = { w: confirmBtn.offsetWidth, h: confirmBtn.offsetHeight };
+      paint(); // 让按钮立刻贴到选区右下角，而不是先停在视口角上
 
       // 延迟一个事件循环再挂确认监听：松手后浏览器会补发一次 click，
       // 同步注册会把那次残留事件当成确认
       setTimeout(() => {
         if (settled || phase !== 2) return;
-        document.addEventListener('mousedown', onConfirm, true);
+        document.addEventListener('mousedown', onAnyDown, true);
+        document.addEventListener('mouseup', onAnyUp, true);
       }, 0);
     };
 

@@ -1,0 +1,255 @@
+:root {
+  --bg: #0f1216;
+  --panel: #171b21;
+  --line: #293241;
+  --text: #e7ebf0;
+  --muted: #8d98a7;
+  --accent: #3b82f6;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+/* ---------- 顶栏 ---------- */
+
+#bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: none;
+  padding: 8px 14px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+
+/* 工具区窄窗口下自己横向滚动；「取消 / 保存」固定在右侧始终可见 */
+.barScroll {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  flex-wrap: wrap;
+  overflow-x: auto;
+}
+
+.barScroll::-webkit-scrollbar { display: none; }
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  padding-left: 6px;
+  border-left: 1px solid var(--line);
+}
+
+.brand {
+  font-weight: 650;
+  letter-spacing: .2px;
+}
+
+.brand span {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(59, 130, 246, .18);
+  color: #8fb8ff;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 9px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.tool:hover { background: #20262f; color: var(--text); }
+
+.tool.is-on {
+  background: rgba(59, 130, 246, .16);
+  border-color: rgba(59, 130, 246, .55);
+  color: #cfe0ff;
+}
+
+.tool svg, .icon svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.icon:hover { background: #20262f; color: var(--text); }
+.icon:disabled { opacity: .35; cursor: default; }
+.icon.sm { width: 24px; height: 24px; font-size: 15px; }
+
+.btn {
+  padding: 7px 14px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #20262f;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.btn:hover { background: #283040; }
+.btn.sm { padding: 3px 9px; font-size: 12px; }
+.btn.ghost { background: transparent; }
+
+.btn.primary {
+  border-color: #2563eb;
+  background: #2563eb;
+  color: #fff;
+  font-weight: 600;
+}
+
+.btn.primary:hover { background: #1d4ed8; }
+
+/* 颜色色板 */
+
+.swatch {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .22);
+}
+
+.swatch.is-on {
+  border-color: var(--text);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .35);
+}
+
+.size-group { gap: 4px; }
+.size-group .cap { color: var(--muted); font-size: 12px; }
+.size-group .val {
+  min-width: 20px;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+#size {
+  width: 76px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* ---------- 画布区 ---------- */
+
+#stageWrap {
+  position: relative;
+  flex: 1;
+  overflow: auto;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 1px 1px, #1b222c 1px, transparent 0) 0 0 / 16px 16px,
+    var(--bg);
+}
+
+#stage {
+  position: relative;
+  width: max-content;
+  margin: 0 auto;
+}
+
+#view {
+  display: block;
+  border-radius: 2px;
+  background: #fff;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, .55);
+  cursor: crosshair;
+  touch-action: none;
+}
+
+#input {
+  position: absolute;
+  display: none;
+  min-width: 60px;
+  margin: 0;
+  padding: 2px 4px;
+  border: 1px dashed var(--accent);
+  border-radius: 4px;
+  outline: none;
+  overflow: hidden;
+  resize: none;
+  background: rgba(10, 14, 20, .45);
+  color: #fff;
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+/* ---------- 底栏 ---------- */
+
+#status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex: none;
+  padding: 6px 14px;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.zoom { display: inline-flex; align-items: center; gap: 4px; }
+
+#zoomVal {
+  min-width: 46px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 错误态 */
+
+#status.err { color: #fca5a5; }

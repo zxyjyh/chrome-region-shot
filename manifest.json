@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Region Shot · 区域截图",
-  "version": "1.6.0",
-  "description": "拖拽定起点，滚动到结束位置点击确认，截取任意范围并保存为 PNG。",
+  "version": "1.7.0",
+  "description": "拖拽定起点，滚动到结束位置，截取任意长页面；在截图上添加文字、箭头、矩形后保存为 PNG。",
   "minimum_chrome_version": "110",
   "icons": {
     "16": "icons/icon16.png",

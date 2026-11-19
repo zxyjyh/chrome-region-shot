@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Region Shot · 商店截图</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1280px; height: 800px; overflow: hidden; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #0b1120;
+  }
+  .slide {
+    position: relative; width: 1280px; height: 800px;
+    background:
+      radial-gradient(1100px 600px at 88% 8%, rgba(99,102,241,.28), transparent 62%),
+      radial-gradient(800px 500px at 8% 100%, rgba(59,130,246,.16), transparent 60%),
+      linear-gradient(180deg, #0c1324, #080d18);
+    overflow: hidden;
+  }
+  .grid-lines {
+    position: absolute; inset: 0; opacity: .16;
+    background-image:
+      linear-gradient(rgba(148,163,184,.16) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(148,163,184,.16) 1px, transparent 1px);
+    background-size: 64px 64px;
+    mask-image: radial-gradient(1200px 700px at 50% 40%, #000 30%, transparent 78%);
+  }
+  .copy {
+    position: absolute; left: 64px; top: 132px; width: 304px; z-index: 2;
+  }
+  .brand {
+    display: inline-flex; align-items: center; gap: 9px;
+    font-size: 16px; font-weight: 750; color: #e2e8f0; letter-spacing: .2px;
+    margin-bottom: 40px;
+  }
+  .brand b {
+    display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px;
+    background: linear-gradient(145deg, #6366f1, #3b82f6); color: #fff;
+    font-size: 15px; font-weight: 800;
+  }
+  .brand em { font-style: normal; color: #818cf8; }
+  h1 {
+    font-size: 44px; line-height: 1.24; color: #f8fafc; letter-spacing: -1px; font-weight: 780;
+  }
+  h1 span { color: #a5b4fc; }
+  p {
+    margin-top: 20px; font-size: 17px; line-height: 1.72; color: #94a3b8; font-weight: 400;
+  }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 30px; }
+  .chips i {
+    font-style: normal; font-size: 13px; color: #c7d2fe;
+    background: rgba(99,102,241,.14); border: 1px solid rgba(129,140,248,.32);
+    padding: 7px 13px; border-radius: 999px;
+  }
+  .shot {
+    position: absolute; top: 90px; height: 619px; width: 1040px;
+    border-radius: 18px; overflow: hidden;
+    border: 1px solid rgba(148,163,184,.22);
+    box-shadow: 0 40px 90px -20px rgba(0,0,0,.75), 0 0 0 1px rgba(255,255,255,.04) inset;
+    background: #fff; z-index: 1;
+  }
+  .shot img { display: block; width: 100%; height: 100%; object-fit: contain; }
+  .wide .shot { right: -150px; }
+  .tall .shot { top: 24px; right: 178px; width: 322px; height: 752px; }
+  .badge {
+    position: absolute; left: 64px; bottom: 44px; z-index: 2;
+    max-width: 300px; font-size: 12px; line-height: 1.75; color: #7c8aa5; letter-spacing: .2px;
+  }
+  .badge b { color: #94a3b8; font-weight: 600; }
+  .badge b { color: #94a3b8; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="slide" id="slide">
+  <div class="grid-lines"></div>
+  <div class="copy">
+    <div class="brand"><b>R</b> Region <em>Shot</em></div>
+    <h1 id="title"></h1>
+    <p id="sub"></p>
+    <div class="chips" id="chips"></div>
+  </div>
+  <div class="shot"><img id="pic" alt=""></div>
+  <div class="badge">Region Shot · 区域截图<br><b>截图 → 标注 → 保存，全部在本机完成</b></div>
+</div>
+
+<script>
+  const SLIDES = {
+    1: {
+      cls: 'wide',
+      title: '长页面<br><span>一次截完</span>',
+      sub: '拖出起点，滚到结尾，<br>自动拼成一整张图。',
+      chips: ['跨屏拼接', '内部滚动容器', '同源 iframe'],
+      pic: 'raw/selection.png',
+    },
+    2: {
+      cls: 'wide',
+      title: '滚到哪<br><span>截到哪</span>',
+      sub: '选区跟着页面一起延伸，<br>滚过的部分都算进长图。',
+      chips: ['滚动延伸', '实时预览', 'Esc 取消'],
+      pic: 'raw/scrolling.png',
+    },
+    3: {
+      cls: 'wide',
+      title: '截完<br><span>直接标</span>',
+      sub: '文字、箭头、矩形，<br>拖动就改，⌘Z 撤销。',
+      chips: ['7 种颜色', '16–96 字号', '双击重编辑'],
+      pic: 'raw/editor.png',
+    },
+    4: {
+      cls: 'wide',
+      title: '整张长图<br><span>一屏看全</span>',
+      sub: '缩放查看整体效果，<br>哪里要改就拖到哪。',
+      chips: ['适应宽度', '自由缩放', '标注可拖动'],
+      pic: 'raw/editor-full.png',
+    },
+    5: {
+      cls: 'tall',
+      title: '所见即所得<br><span>导出原图</span>',
+      sub: '按原图尺寸重绘后保存 PNG，<br>标注位置和画布上完全一致。',
+      chips: ['原图分辨率', '不压缩', '不上传'],
+      pic: 'raw/exported.png',
+    },
+  };
+  const n = Number(new URLSearchParams(location.search).get('slide') || 1);
+  const s = SLIDES[n] || SLIDES[1];
+  document.getElementById('slide').classList.add(s.cls);
+  document.getElementById('title').innerHTML = s.title;
+  document.getElementById('sub').innerHTML = s.sub;
+  document.getElementById('chips').innerHTML = s.chips.map((c) => `<i>${c}</i>`).join('');
+  document.getElementById('pic').src = s.pic;
+</script>
+</body>
+</html>
