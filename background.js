@@ -728,18 +728,31 @@ function selectionOverlay(ver, L) {
       return { x: clientX + window.scrollX, y: clientY + window.scrollY };
     };
 
-    // 读取目标容器当前的滚动位置和视口尺寸（内容坐标下，视口 = [scrollX/Y, scrollX/Y + clientW/H]）
+    // 读取目标容器当前的滚动位置、视口尺寸和内容尺寸
+    // （内容坐标下，视口 = [scrollX/Y, scrollX/Y + clientW/H]）
     const readScroll = () => {
       const t = target;
       if (t && t.kind === 'iframe') {
         const se = t.doc.scrollingElement || t.doc.documentElement;
-        return { x: se.scrollLeft, y: se.scrollTop, viewportW: se.clientWidth, viewportH: se.clientHeight };
+        return {
+          x: se.scrollLeft, y: se.scrollTop,
+          viewportW: se.clientWidth, viewportH: se.clientHeight,
+          contentW: se.scrollWidth, contentH: se.scrollHeight,
+        };
       }
       if (t && t.kind === 'element') {
-        return { x: t.el.scrollLeft, y: t.el.scrollTop, viewportW: t.el.clientWidth, viewportH: t.el.clientHeight };
+        return {
+          x: t.el.scrollLeft, y: t.el.scrollTop,
+          viewportW: t.el.clientWidth, viewportH: t.el.clientHeight,
+          contentW: t.el.scrollWidth, contentH: t.el.scrollHeight,
+        };
       }
       const se = document.scrollingElement || document.documentElement;
-      return { x: window.scrollX, y: window.scrollY, viewportW: se.clientWidth, viewportH: se.clientHeight };
+      return {
+        x: window.scrollX, y: window.scrollY,
+        viewportW: se.clientWidth, viewportH: se.clientHeight,
+        contentW: se.scrollWidth, contentH: se.scrollHeight,
+      };
     };
 
     const root = document.createElement('div');
@@ -812,10 +825,14 @@ function selectionOverlay(ver, L) {
     let startContentY = 0;
     let anchorEndX = 0; // 进入第二阶段时的选区右下角（内容坐标）
     let anchorEndY = 0;
-    let baseScrollX = 0; // 进入第二阶段时的滚动位置，用来判断滚动方向
+    let baseScrollX = 0; // 进入第二阶段时的滚动位置
     let baseScrollY = 0;
-    let stickyBottom = false; // 向下滚过之后，下边界贴视口底
-    let stickyRight = false; // 向右滚过之后，右边界贴视口右缘
+    // 平滑补齐：进入第二阶段时，选区底/右边界到视口底/右缘还差多少。
+    // 这段差值在滚动过程中按 t² 的曲线逐渐补齐，到页面底部时正好为 0。
+    let gapBottom = 0;
+    let gapRight = 0;
+    let scrollRangeY = 0; // 进入第二阶段时，距离内容底部还有多少可滚动距离
+    let scrollRangeX = 0;
     let lastClientX = 0;
     let lastClientY = 0;
     let current = { x: 0, y: 0, w: 0, h: 0 };
@@ -916,32 +933,46 @@ function selectionOverlay(ver, L) {
       paint();
     };
 
-    // 第二阶段：选区始终覆盖「当前视口」加「最初拖出来的框」。
-    // 向下滚动后，下边界贴住视口底：滚到哪里，可视区域里已滚过的内容就都算进选区，
-    // 滚到页面底时视口下边缘就是内容底，自然包含到底。
-    // 向上滚动时按同一规则回缩，但不会小于最初拖出来的区域。
-    // 横向同理，只有用户真的向右滚过才把右边界贴到视口右缘——否则只纵向滚动
-    // 会把用户拖好的宽度撑到整屏。
+    // 第二阶段：选区随滚动延伸，全程连续、不跳变。
+    //
+    // 进入第二阶段时选区就是拖出来的那个框；随着滚动，下边界按滚动量 1:1 下移。
+    // 但「1:1」有个尾差：如果松手时选区底边停在屏幕中间，滚动到底后选区底边
+    // 会比内容底部少一截（视口底 − 松手时的选区底）。这段尾差用 t² 曲线
+    // 在滚动过程中逐渐补齐，到页面底部正好为 0：
+    //   下边界 = scrollY + 视口高 − 尾差 × (1 − t²)，t = 已滚距离 / 可滚距离
+    // 起始 t=0，尾差完整，下边界 = 拖出来的底边；到底 t=1，尾差为 0，
+    // 下边界 = 内容底部。全程平滑，既不会在松手时弹到屏幕底，也不会在
+    // 快到底时突然跳一屏。
+    // 横向同理，只有真的向右滚过才延伸（dx>0），所以纯纵向滚动不会撑宽。
     // 这里刻意不读鼠标位置——按钮贴在选区右下角，如果选区跟着鼠标跑，
     // 鼠标一靠近按钮选区就把按钮推走，永远点不中。
     const updateAdjusting = () => {
       const s = readScroll();
-      if (s.y > baseScrollY + 0.5) stickyBottom = true;
-      if (s.x > baseScrollX + 0.5) stickyRight = true;
 
       const selTop = Math.min(startContentY, anchorEndY);
       const selLeft = Math.min(startContentX, anchorEndX);
       const initBottom = Math.max(startContentY, anchorEndY);
       const initRight = Math.max(startContentX, anchorEndX);
-      const bottom = stickyBottom ? Math.max(initBottom, s.y + s.viewportH) : initBottom;
-      const right = stickyRight ? Math.max(initRight, s.x + s.viewportW) : initRight;
 
-      current = {
-        x: selLeft,
-        y: selTop,
-        w: right - selLeft,
-        h: bottom - selTop,
-      };
+      const dy = Math.max(0, s.y - baseScrollY);
+      // 页面没有可滚动距离时保持拖动尺寸：没有滚动就没有「跟随滚动延伸」，
+      // 不能在松手瞬间自动铺满视口（横向尤其会把用户拖好的宽度撑到整屏）。
+      const ty = scrollRangeY > 0 ? Math.min(1, dy / scrollRangeY) : 0;
+      const gapY = gapBottom * (1 - ty * ty);
+      const bottom = Math.min(
+        s.contentH,
+        Math.max(initBottom, s.y + s.viewportH - gapY)
+      );
+
+      const dx = Math.max(0, s.x - baseScrollX);
+      const tx = scrollRangeX > 0 ? Math.min(1, dx / scrollRangeX) : 0;
+      const gapX = gapRight * (1 - tx * tx);
+      const right = Math.min(
+        s.contentW,
+        Math.max(initRight, s.x + s.viewportW - gapX)
+      );
+
+      current = { x: selLeft, y: selTop, w: right - selLeft, h: bottom - selTop };
       paint();
     };
 
@@ -1167,7 +1198,7 @@ function selectionOverlay(ver, L) {
         return;
       }
 
-      // 进入第二阶段：选区随滚动覆盖整个可视区域，见 updateAdjusting
+      // 进入第二阶段：选区随滚动延伸，见 updateAdjusting
       phase = 2;
       phaseAt = Date.now();
       startContentX = current.x;
@@ -1177,8 +1208,14 @@ function selectionOverlay(ver, L) {
       const s0 = readScroll();
       baseScrollX = s0.x;
       baseScrollY = s0.y;
-      stickyBottom = false;
-      stickyRight = false;
+      // 记录松手时选区到视口底/右缘的尾差，以及还能滚动多远；
+      // updateAdjusting 会按滚动进度把尾差平滑补齐到 0。
+      const initB = Math.max(startContentY, anchorEndY);
+      const initR = Math.max(startContentX, anchorEndX);
+      gapBottom = Math.max(0, s0.y + s0.viewportH - initB);
+      gapRight = Math.max(0, s0.x + s0.viewportW - initR);
+      scrollRangeY = Math.max(0, s0.contentH - s0.viewportH - s0.y);
+      scrollRangeX = Math.max(0, s0.contentW - s0.viewportW - s0.x);
       box.style.borderColor = '#10b981';
       root.style.background = 'rgba(0,0,0,0.06)';
       tip.textContent = ver + ' · ' + L.step2;
@@ -1211,7 +1248,7 @@ function selectionOverlay(ver, L) {
       });
       document.documentElement.appendChild(confirmBtn);
       btnBox = { w: confirmBtn.offsetWidth, h: confirmBtn.offsetHeight };
-      paint(); // 让按钮立刻贴到选区右下角，而不是先停在视口角上
+      updateAdjusting(); // 初始化选区（保持拖动尺寸）并把按钮贴到选区右下角
 
       // 延迟一个事件循环再挂确认监听：松手后浏览器会补发一次 click，
       // 同步注册会把那次残留事件当成确认

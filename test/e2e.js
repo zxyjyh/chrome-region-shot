@@ -253,6 +253,10 @@ async function runCase(page, dpr) {
     await sleep(40);
   }
   await sleep(500);
+  // 滚到真正的底部：选区在接近底部时会平滑补齐尾差，到底时下边界 = 内容底部；
+  // 如果停在离底部还有几十像素的位置，期望高度会按视口底算，但选区还差一点。
+  await evalPage(`(window.__testScrollTo ? window.__testScrollTo(1e9) : window.scrollTo(0, 1e9))`);
+  await sleep(400);
   const afterScroll = await evalPage(`window.__testScrollTop ? window.__testScrollTop() : 0`);
   console.log(`    滚动手势: ${beforeScroll} → ${afterScroll}`);
   if (afterScroll - beforeScroll < 500) {

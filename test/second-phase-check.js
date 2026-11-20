@@ -233,6 +233,25 @@ const check = (name, ok, detail = '') => {
 
     const s0 = await state();
     check('松手后进入第二阶段', s0.overlay && s0.boxH >= 250 && s0.btnX > 0, JSON.stringify(s0));
+    // 松手时选区必须还是拖出来的那个框（这次拖拽是 120→760 / 140→420，640×280）。
+    // 如果松手就铺满视口，用户会觉得「还没滚，选区自己跳到了屏幕底/右边」。
+    check(
+      '进入第二阶段时选区保持拖动尺寸',
+      Math.abs(s0.boxH - 280) <= 2 && Math.abs(s0.boxW - 640) <= 2,
+      `尺寸 ${s0.boxW}×${s0.boxH}，期望 640×280`
+    );
+
+    // 第一次滚动只按滚动量延伸（1:1），不能出现额外的一屏跳变
+    await pageConn.send('Input.dispatchMouseEvent', {
+      type: 'mouseWheel', x: 500, y: 400, deltaX: 0, deltaY: 100, pointerType: 'mouse',
+    });
+    await sleep(350);
+    const sFirst = await state();
+    check(
+      '第一次滚动按滚动量延伸（无跳变）',
+      Math.abs(sFirst.boxH - s0.boxH - (sFirst.y - s0.y)) <= 4,
+      `高度 ${s0.boxH} → ${sFirst.boxH}，滚动 ${s0.y} → ${sFirst.y}`
+    );
 
     // ---- 1. 滚轮滚动 ----
     for (let i = 0; i < 12; i++) {
@@ -245,15 +264,16 @@ const check = (name, ok, detail = '') => {
     const s1 = await state();
     check('滚轮能滚动页面', s1.y - s0.y > 500, `scrollY ${s0.y} → ${s1.y}`);
     check('选区跟着滚动延伸', s1.boxH > s0.boxH + 500, `高度 ${s0.boxH} → ${s1.boxH}`);
-    // 滚动时选区下边界应该贴住视口底部（内容坐标 = scrollY + 视口高度），
-    // 而不是钉在拖动结束时的屏幕位置——否则选区下方永远有一条未被选中的内容带
+    // 滚动时选区底边逐渐追上视口底部：松手时尾差 = 视口底 − 选区底（这里约 297px），
+    // 随着滚动按 t² 曲线缩小，但不会在某一帧突然跳一屏。
+    const gap0 = s0.clientH - s0.boxBottom;
+    const gap1 = s1.clientH - s1.boxBottom;
     check(
-      '选区下边界贴住视口底部',
-      Math.abs(s1.boxBottom - s1.clientH) <= 1 &&
-        Math.abs(s1.boxBottomContent - (s1.y + s1.clientH)) <= 1,
-      `屏幕底 ${s1.boxBottom} vs 视口高 ${s1.clientH}；内容底 ${s1.boxBottomContent} vs ${s1.y}+${s1.clientH}`
+      '滚动时选区底边平滑追上视口底（尾差缩小）',
+      gap0 > 0 && gap1 < gap0 && gap1 > 0,
+      `尾差 ${gap0} → ${gap1}`
     );
-    check('只纵向滚动时宽度保持拖动尺寸', s1.boxW === s0.boxW, `宽 ${s0.boxW} → ${s1.boxW}`);
+    check('只纵向滚动时宽度保持拖动尺寸', s0.boxW === 640 && s1.boxW === 640, `宽 ${s0.boxW} → ${s1.boxW}，期望 640`);
     // 按钮贴在选区右下角，选区右下角现在贴视口底，所以按钮应钳在视口右下区域内
     const btnGapOk = (s) => Math.abs(s.btnY - s.boxBottom) <= 60;
     check(
@@ -290,7 +310,7 @@ const check = (name, ok, detail = '') => {
 
     // ---- 3.5 滚到页面最底部：选区必须延伸到内容底部 ----
     // 回归：下边界只跟滚动增量的话，到底后底边会停在视口中间，页面最后一段截不到。
-    // 现在下边界贴视口底，滚到最底 = 视口底 = 内容底。
+    // 现在尾差在滚动过程中逐渐补齐，到底时正好为 0。
     await evalPage(`window.scrollTo(0, document.scrollingElement.scrollHeight)`);
     await sleep(400);
     const sBottom = await state();
@@ -301,22 +321,23 @@ const check = (name, ok, detail = '') => {
       JSON.stringify(sBottom)
     );
 
-    // ---- 3.6 离开边界再滚回：按滚动量 1:1 收缩 / 恢复 ----
+    // ---- 3.6 离开边界再滚回：平滑收缩 / 恢复，不能整屏跳变 ----
     await evalPage(`window.scrollTo(0, Math.max(0, window.scrollY - 400))`);
     await sleep(300);
     const sUp = await state();
     check(
-      '离开边界后选区按滚动量 1:1 收缩',
-      Math.abs(sBottom.boxH - sUp.boxH - (sBottom.y - sUp.y)) <= 4,
-      `高度 ${sBottom.boxH} → ${sUp.boxH}，滚动 ${sBottom.y} → ${sUp.y}`
+      '离开边界后选区平滑收缩（无整屏跳变）',
+      sUp.boxH < sBottom.boxH &&
+        sBottom.boxH - sUp.boxH <= sBottom.clientH + 4,
+      `高度 ${sBottom.boxH} → ${sUp.boxH}，收缩 ${sBottom.boxH - sUp.boxH}，视口 ${sBottom.clientH}`
     );
     await evalPage(`window.scrollTo(0, document.scrollingElement.scrollHeight)`);
     await sleep(300);
     const sEnd = await state();
     check(
-      '滚回底部时选区按滚动量 1:1 恢复',
-      Math.abs(sEnd.boxH - sUp.boxH - (sEnd.y - sUp.y)) <= 4,
-      `高度 ${sUp.boxH} → ${sEnd.boxH}，滚动 ${sUp.y} → ${sEnd.y}`
+      '滚回底部时选区恢复原高度',
+      Math.abs(sEnd.boxH - sBottom.boxH) <= 2,
+      `高度 ${sUp.boxH} → ${sEnd.boxH}，原高度 ${sBottom.boxH}`
     );
     check(
       '回到内容底部（选区完整）',

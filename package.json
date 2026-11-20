@@ -1,6 +1,6 @@
 {
   "name": "region-shot",
-  "version": "1.8.3",
+  "version": "1.8.4",
   "private": true,
   "description": "Region Shot · 区域截图 — Chrome 扩展",
   "scripts": {
