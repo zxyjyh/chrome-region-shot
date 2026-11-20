@@ -1,7 +1,7 @@
 # Chrome 应用商店上架材料
 
-> 对应版本：`1.8.3`（manifest.json）
-> 更新日期：2026-11-19（初版 2026-11-17 对应 1.7.0；1.8.3 新增三语界面、复制图片、选区贴视口底）
+> 对应版本：`1.8.4`（三语界面 + 复制图片；1.8.4 选区改为跟随滚动、平滑补齐尾差）
+> 更新日期：2026-11-20（初版 2026-11-17 对应 1.7.0；1.8.3 新增三语界面、复制图片；1.8.4 修复选区跳变）
 > 配套文件：`privacy-policy.html`（隐私政策页面，需要托管到公网 URL）
 
 ---
@@ -58,7 +58,7 @@ Region Shot 让你先框出要的那一列，再滚到结束位置，把中间�
 
 1. 在网页上点扩展图标，或按 Alt+Shift+S
 2. 按住拖拽，确定截图区域的起点和范围（按住时拖到屏幕四边会自动滚动）
-3. 松开后，用触摸板或滚轮滚动到想结束的位置。选区下边界贴着屏幕底部走：滚到哪里，滚过的内容都算进选区，滚到页面底部自然截到底，选区旁实时显示当前尺寸
+3. 松开后，用触摸板或滚轮滚动到想结束的位置。选区跟着滚动平滑延伸，不会自己跳动；滚到页面底部时，选区正好覆盖到内容底部，页面最后一段也能截到。选区旁实时显示当前尺寸
 4. 点选区右下角的「✓ 完成截图」（或点页面任意位置）；按钮跟着选区走，滚到哪里都点得到
 5. 截图完成后打开标注编辑器：加文字、箭头、矩形，可拖动、改颜色和字号，⌘Z 撤销
 6. 点「✓ 保存 PNG」存到下载文件夹，或点「复制图片」直接粘贴到微信 / 钉钉等任意应用
@@ -112,7 +112,7 @@ Region Shot 讓你先框出要的那一欄，再捲動到結束位置，把中�
 
 1. 在網頁上點擴充功能圖示，或按 Alt+Shift+S
 2. 按住拖曳，確定截圖區域的起點和範圍（按住時拖到螢幕四邊會自動捲動）
-3. 放開後，用觸控板或滾輪捲動到想結束的位置。選取區下邊界貼著螢幕底部走：捲到哪裡，捲過的內容都算進選取區，捲到頁面底部自然截到底，選取區旁即時顯示目前尺寸
+3. 放開後，用觸控板或滾輪捲動到想結束的位置。選取區跟著捲動平滑延伸，不會自己跳動；捲到頁面底部時，選取區正好覆蓋到內容底部，頁面最後一段也能截到。選取區旁即時顯示目前尺寸
 4. 點選取區右下角的「✓ 完成截圖」（或點頁面任意位置）；按鈕跟著選取區走，捲到哪裡都點得到
 5. 截圖完成後開啟標註編輯器：加入文字、箭頭、矩形，可拖動、改顏色和字級，⌘Z 復原
 6. 點「✓ 儲存 PNG」存到下載資料夾，或點「複製圖片」直接貼到微信 / 釘釘等任意應用程式
@@ -163,7 +163,7 @@ Region Shot lets you define the start point and width of a region, scroll to whe
 How to use:
 1. Click the extension icon, or press Alt+Shift+S
 2. Drag to set the starting point and width of the capture area. Dragging to the edge of the window auto-scrolls.
-3. Release, then scroll to the point where the capture should end. The bottom edge of the selection follows the bottom of the screen, so everything you scroll past is included; at the end of the page the capture reaches the real bottom. Live dimensions are shown next to the selection.
+3. Release, then scroll to the point where the capture should end. The selection extends smoothly as you scroll — no automatic jumps; at the end of the page it reaches the real bottom of the content. Live dimensions are shown next to the selection.
 4. Click "Done" at the bottom-right of the selection, or click anywhere on the page. The button follows the selection, so it stays reachable while you scroll.
 5. The annotation editor opens: add text, arrows and rectangles; drag to move, change colour and font size, ⌘Z to undo.
 6. Click "✓ Save PNG" to download, or "Copy image" to paste straight into any app.
@@ -197,7 +197,7 @@ Known limitations: follows a single scroll container; cross-origin iframes canno
 表单文本框填入：
 
 ```
-Capture a user-selected rectangular region of the current web page — including content taller than the viewport — annotate it with text, arrows and boxes, and save it as a single PNG image.
+Capture a user-selected rectangular region of the current web page — including content taller than the viewport — let the user annotate it with text, arrows and boxes, and output it as a single PNG image, either saved to disk or copied to the clipboard.
 
 Every permission and every line of code serves this one purpose. The extension has no other feature: it does not block ads, modify pages, manage tabs, collect analytics, or sync anything.
 ```
@@ -369,7 +369,7 @@ No account or credentials are required. Everything runs locally.
 1. Open any long public article, for example https://en.wikipedia.org/wiki/Screenshot
 2. Click the Region Shot toolbar icon (or press Alt+Shift+S).
 3. In the middle of the article body, press the mouse and drag 200-300px horizontally, then release. A green selection outline appears and a "Done" button appears at the bottom right of the selection.
-4. Scroll down with the mouse wheel. The bottom edge of the selection follows the bottom of the viewport, so everything you scroll past is included, and the live dimension indicator updates. Scroll to the end of the page: the selection extends to the real bottom of the content.
+4. Scroll down with the mouse wheel. The selection extends smoothly with each scroll step and the live dimension indicator updates. Scroll to the end of the page: the selection reaches the real bottom of the content.
 5. Click the "Done" button once the selection is several screens tall.
 6. The annotation editor opens in a new tab with the stitched image. Add some text, an arrow, or a rectangle, then click "Save PNG" (✓ 保存 PNG), or click "Copy image" to paste the result straight into any app.
 7. Optional, to test the storage permission: use the 🌐 selector in the editor toolbar to switch the interface to another language. Start a second capture on the same page and confirm the selection overlay is shown in that language.
