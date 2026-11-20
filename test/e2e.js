@@ -13,7 +13,7 @@ const os = require('os');
 const { readImage, nameToColor } = require('./png.js');
 
 const ROOT = path.resolve(__dirname, '..');
-const TMP = path.join(os.tmpdir(), 'region-shot-e2e');
+const TMP = path.join(os.tmpdir(), 'area-screenshot-e2e');
 const EXT = path.join(TMP, 'ext');
 const DL = path.join(TMP, 'dl');
 const PROFILE = path.join(TMP, 'profile');
@@ -200,7 +200,7 @@ async function runCase(page, dpr) {
   // 等遮罩注入
   let ready = false;
   for (let i = 0; i < 40; i++) {
-    ready = await evalPage(`!!document.getElementById('__region_shot_overlay__')`);
+    ready = await evalPage(`!!document.getElementById('__area_screenshot_overlay__')`);
     if (ready) break;
     await sleep(200);
   }
@@ -234,8 +234,8 @@ async function runCase(page, dpr) {
 
   // 关键断言：松手后不能自动开始截图（此前的 bug 就是这里）
   const phase2 = await evalPage(`(() => {
-    const overlay = document.getElementById('__region_shot_overlay__');
-    const btn = document.getElementById('__region_shot_confirm__');
+    const overlay = document.getElementById('__area_screenshot_overlay__');
+    const btn = document.getElementById('__area_screenshot_confirm__');
     return { overlay: !!overlay, btn: btn ? btn.getBoundingClientRect().toJSON() : null };
   })()`);
   if (!phase2.overlay || !phase2.btn) {
@@ -277,7 +277,7 @@ async function runCase(page, dpr) {
   await pageConn.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 300, y: 200, ...base });
   await pageConn.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: 300, y: 200, ...base });
   await sleep(250);
-  const stillOpenAfterDrag = await evalPage(`!!document.getElementById('__region_shot_overlay__')`);
+  const stillOpenAfterDrag = await evalPage(`!!document.getElementById('__area_screenshot_overlay__')`);
   if (!stillOpenAfterDrag) throw new Error('拖动被误判成点击确认，截图提前结束');
 
   // 回归：点在右侧滚动条区域也不能确认（点击滚动条轨道会让浏览器自己滚一屏，这是预期行为）
@@ -285,7 +285,7 @@ async function runCase(page, dpr) {
   await pageConn.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: vw - 10, y: 200, ...base });
   await pageConn.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: vw - 10, y: 200, ...base });
   await sleep(250);
-  const stillOpenAfterScrollbar = await evalPage(`!!document.getElementById('__region_shot_overlay__')`);
+  const stillOpenAfterScrollbar = await evalPage(`!!document.getElementById('__area_screenshot_overlay__')`);
   if (!stillOpenAfterScrollbar) throw new Error('点击滚动条区域被误判成确认');
 
   // 探针可能改变了滚动位置（滚动条点击会滚一屏），恢复后再继续
@@ -296,7 +296,7 @@ async function runCase(page, dpr) {
 
   // 第三步：点完成按钮
   const btn = await evalPage(`(() => {
-    const b = document.getElementById('__region_shot_confirm__');
+    const b = document.getElementById('__area_screenshot_confirm__');
     const r = b.getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
   })()`);
@@ -304,7 +304,7 @@ async function runCase(page, dpr) {
   await pageConn.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: btn.x, y: btn.y, ...base });
   await sleep(120);
   const btnAfter = await evalPage(`(() => {
-    const b = document.getElementById('__region_shot_confirm__');
+    const b = document.getElementById('__area_screenshot_confirm__');
     const r = b.getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
   })()`);
@@ -558,7 +558,7 @@ async function runHorizontalCase(page, dpr) {
 
   let ready = false;
   for (let i = 0; i < 40; i++) {
-    ready = await evalPage(`!!document.getElementById('__region_shot_overlay__')`);
+    ready = await evalPage(`!!document.getElementById('__area_screenshot_overlay__')`);
     if (ready) break;
     await sleep(200);
   }
@@ -611,7 +611,7 @@ async function runHorizontalCase(page, dpr) {
 
   // 按钮现在跟随选区，位置不固定，必须读实际坐标
   const btn = await evalPage(`(() => {
-    const b = document.getElementById('__region_shot_confirm__');
+    const b = document.getElementById('__area_screenshot_confirm__');
     if (!b) return null;
     const r = b.getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 };

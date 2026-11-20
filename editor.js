@@ -1,4 +1,4 @@
-// Region Shot · 标注编辑器
+// Area Screenshot · 标注编辑器
 //
 // 数据流：background 拼接完成后把 PNG 写进 IndexedDB（扩展 origin 下 service worker
 // 与扩展页面共享同一份），用一次性的 id 打开本页；本页读出来立刻删除记录。
@@ -8,7 +8,7 @@
 
 'use strict';
 
-const SHOT_DB = 'region-shot';
+const SHOT_DB = 'area-screenshot';
 const SHOT_STORE = 'shots';
 
 const MAX_VIEW_PIXELS = 40e6; // 显示画布的总像素上限，超大图降 dpr 而不是卡死
@@ -85,7 +85,7 @@ function fail(msg) {
   statusEl.classList.add('err');
   hint.textContent = msg;
   saveBtn.disabled = true;
-  console.error('[RegionShot 标注]', msg);
+  console.error('[AreaScreenshot 标注]', msg);
 }
 
 function openDB() {
@@ -783,7 +783,7 @@ async function copyImage() {
   try {
     await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
   } catch (e) {
-    console.warn('[RegionShot 标注] 复制到剪贴板失败', e);
+    console.warn('[AreaScreenshot 标注] 复制到剪贴板失败', e);
     copyBtn.disabled = false;
     copyBtn.textContent = tr('copy');
     fail(tr('copyFailed'));
@@ -807,7 +807,7 @@ async function download(blob, name) {
     setTimeout(() => URL.revokeObjectURL(url), 60000);
     return 'api';
   } catch (e) {
-    console.warn('[RegionShot 标注] downloads.download 失败，改用页面下载', e);
+    console.warn('[AreaScreenshot 标注] downloads.download 失败，改用页面下载', e);
   }
   URL.revokeObjectURL(url);
 
@@ -824,7 +824,7 @@ async function download(blob, name) {
     }, 60000);
     return 'anchor';
   } catch (e) {
-    console.warn('[RegionShot 标注] 页面下载也失败', e);
+    console.warn('[AreaScreenshot 标注] 页面下载也失败', e);
     return false;
   }
 }

@@ -1,4 +1,4 @@
-// Region Shot · 区域截图（滚动拼接方案）
+// Area Screenshot — 网页长截图（滚动拼接方案）
 //
 // 为什么不用 captureBeyondViewport 一次性截取：
 // 大量网站的主内容放在 overflow:auto 的内部容器里，此时 window.scrollY 恒为 0、
@@ -13,12 +13,12 @@
 const MAX_TOTAL_DEVICE = 30000; // 最终画布单边的设备像素上限
 const MAX_CANVAS_PIXELS = 16384 * 16384; // Chrome 画布的面积上限，超了会直接创建失败
 const SCROLL_SETTLE_MS = 250; // 每屏滚动后等待渲染的时间
-const SHOT_DB = 'region-shot'; // 与 editor.js 里的常量保持一致
+const SHOT_DB = 'area-screenshot'; // 与 editor.js 里的常量保持一致
 const SHOT_STORE = 'shots';
 
 chrome.action.onClicked.addListener((tab) => {
   runCapture(tab).catch((err) => {
-    console.error('[RegionShot]', err);
+    console.error('[AreaScreenshot]', err);
     if (tab?.id) setBadge(tab.id, '!', '#dc2626');
   });
 });
@@ -27,7 +27,7 @@ async function runCapture(tab) {
   if (!tab.id) return;
 
   if (!/^(https?|file):/i.test(tab.url || '')) {
-    console.warn('[RegionShot] 当前页面不支持截图:', tab.url);
+    console.warn('[AreaScreenshot] 当前页面不支持截图:', tab.url);
     setBadge(tab.id, '!', '#dc2626');
     return;
   }
@@ -41,7 +41,7 @@ async function runCapture(tab) {
   try {
     await chrome.debugger.attach(target, '1.3');
   } catch (e) {
-    console.warn('[RegionShot] 无法附加调试器（该标签可能已被 DevTools 占用）', e);
+    console.warn('[AreaScreenshot] 无法附加调试器（该标签可能已被 DevTools 占用）', e);
     setBadge(tab.id, '!', '#dc2626');
     return;
   }
@@ -58,17 +58,17 @@ async function runCapture(tab) {
         overlayText,
       ]);
     } catch (e) {
-      console.warn('[RegionShot] 注入选区失败', e);
+      console.warn('[AreaScreenshot] 注入选区失败', e);
       setBadge(tab.id, '!', '#dc2626');
       return;
     }
     if (!sel) return;
-    console.log('[RegionShot] 选区', sel);
+    console.log('[AreaScreenshot] 选区', sel);
 
     // 2) 滚动截图
     await captureByScroll(tab, target, sel);
   } catch (e) {
-    console.error('[RegionShot] 截图失败', e);
+    console.error('[AreaScreenshot] 截图失败', e);
     setBadge(tab.id, '!', '#dc2626');
   } finally {
     try {
@@ -94,7 +94,7 @@ async function captureByScroll(tab, target, sel) {
   const totalW = Math.min(sel.w, contentW - sel.x, MAX_TOTAL_DEVICE / dpr);
   const totalH = Math.min(sel.h, contentH - sel.y, MAX_TOTAL_DEVICE / dpr);
 
-  console.log('[RegionShot] 滚动参数', JSON.stringify({ sel, geo0, contentW, contentH, totalW, totalH }));
+  console.log('[AreaScreenshot] 滚动参数', JSON.stringify({ sel, geo0, contentW, contentH, totalW, totalH }));
 
   if (totalH <= 1) throw new Error('选区没有有效高度（内容高度 ' + contentH + '，起点 ' + sel.y + '）');
   if (totalW <= 1) throw new Error('选区没有有效宽度（内容宽度 ' + contentW + '，起点 ' + sel.x + '）');
@@ -116,12 +116,12 @@ async function captureByScroll(tab, target, sel) {
   try {
     floating = await execResult(tab.id, hideFloating, [sel.kind]);
     if (floating) {
-      console.log('[RegionShot] 隐藏吸顶元素', floating);
+      console.log('[AreaScreenshot] 隐藏吸顶元素', floating);
       await execResult(tab.id, waitFrames);
       await sleep(80);
     }
   } catch (e) {
-    console.warn('[RegionShot] 隐藏吸顶元素失败', e);
+    console.warn('[AreaScreenshot] 隐藏吸顶元素失败', e);
   }
 
   try {
@@ -150,7 +150,7 @@ async function captureByScroll(tab, target, sel) {
         const w = Math.min(endX - px, availW);
 
         if (h <= 2) {
-          console.warn('[RegionShot] 无法继续纵向滚动，提前结束', {
+          console.warn('[AreaScreenshot] 无法继续纵向滚动，提前结束', {
             py,
             scrollTop: g.scrollTop,
             viewportH: g.viewportH,
@@ -160,7 +160,7 @@ async function captureByScroll(tab, target, sel) {
         if (w <= 2) {
           // 这一行已经横向到头（页面不支持横向滚动，或内容宽度不够）
           if (!painted) {
-            console.warn('[RegionShot] 选区宽度越界', { sel, g });
+            console.warn('[AreaScreenshot] 选区宽度越界', { sel, g });
           }
           break;
         }
@@ -273,7 +273,7 @@ async function captureByScroll(tab, target, sel) {
     setBadge(tab.id, 'OK');
     setTimeout(() => setBadge(tab.id, ''), 2500);
   } catch (e) {
-    console.warn('[RegionShot] 打开标注编辑器失败，直接保存原图', e);
+    console.warn('[AreaScreenshot] 打开标注编辑器失败，直接保存原图', e);
     await saveWithFallback(tab, await blobToDataUrl(blob), filename);
   }
 }
@@ -342,16 +342,16 @@ async function saveWithFallback(tab, dataUrl, filename) {
     await chrome.downloads.download({ url: dataUrl, filename, saveAs: false });
     saved = true;
   } catch (e) {
-    console.warn('[RegionShot] downloads.download 失败，改用页面下载', e);
+    console.warn('[AreaScreenshot] downloads.download 失败，改用页面下载', e);
   }
 
   if (!saved) {
     try {
       const r = await execResult(tab.id, saveImage, [dataUrl, filename]);
       saved = r === true;
-      if (!saved) console.warn('[RegionShot] 页面下载返回', r);
+      if (!saved) console.warn('[AreaScreenshot] 页面下载返回', r);
     } catch (e) {
-      console.warn('[RegionShot] 页面下载失败', e);
+      console.warn('[AreaScreenshot] 页面下载失败', e);
     }
   }
 
@@ -384,8 +384,13 @@ function resolveOverlayLang(mode) {
 
 async function getLangPref() {
   try {
-    const r = await chrome.storage.local.get('regionShotLang');
-    return r.regionShotLang || 'auto';
+    // 旧 key 只读兼容：改名前的用户偏好仍然生效
+    const r = await chrome.storage.local.get([
+      'areaScreenshotLang',
+      'regionShotLang',
+      'regionShotEditorLang',
+    ]);
+    return r.areaScreenshotLang || r.regionShotLang || r.regionShotEditorLang || 'auto';
   } catch {
     return 'auto';
   }
@@ -407,7 +412,7 @@ async function overlayMessages(lang) {
     out.step2 = json.overlayStep2.message;
     out.done = json.overlayDone.message;
   } catch (e) {
-    console.warn('[RegionShot] 读取语言包失败，回退浏览器语言', e);
+    console.warn('[AreaScreenshot] 读取语言包失败，回退浏览器语言', e);
   }
   OVERLAY_MSG_CACHE.set(lang, out);
   return out;
@@ -478,8 +483,8 @@ function stamp() {
 // 读取滚动容器的几何与滚动状态
 // kind: 'doc'（整个页面） | 'element'（内部滚动容器） | 'iframe'（同源 iframe 内部滚动）
 function readGeo(kind) {
-  const SCROLLER = 'data-region-shot-scroller';
-  const FRAME = 'data-region-shot-frame';
+  const SCROLLER = 'data-area-screenshot-scroller';
+  const FRAME = 'data-area-screenshot-frame';
   const dpr = window.devicePixelRatio || 1;
 
   if (kind === 'iframe') {
@@ -539,8 +544,8 @@ function readGeo(kind) {
 
 // 把滚动容器移到指定位置（横向 + 纵向）
 function scrollToPosition(kind, top, left) {
-  const SCROLLER = 'data-region-shot-scroller';
-  const FRAME = 'data-region-shot-frame';
+  const SCROLLER = 'data-area-screenshot-scroller';
+  const FRAME = 'data-area-screenshot-frame';
   const hasLeft = typeof left === 'number' && Number.isFinite(left);
 
   if (kind === 'iframe') {
@@ -583,7 +588,7 @@ function waitFrames() {
 // 重复出现，又把它盖住的正文一起抹掉。截图期间设为 hidden（不影响布局），
 // 截完恢复原值。
 function hideFloating(kind) {
-  const FRAME = 'data-region-shot-frame';
+  const FRAME = 'data-area-screenshot-frame';
   const docs = [document];
   if (kind === 'iframe') {
     const f = document.querySelector('[' + FRAME + ']');
@@ -604,7 +609,7 @@ function hideFloating(kind) {
       continue;
     }
     for (const el of all) {
-      if (el.hasAttribute('data-region-shot-float')) continue;
+      if (el.hasAttribute('data-area-screenshot-float')) continue;
       let pos = '';
       try {
         pos = win.getComputedStyle(el).position;
@@ -612,7 +617,7 @@ function hideFloating(kind) {
         continue;
       }
       if (pos !== 'fixed' && pos !== 'sticky') continue;
-      el.setAttribute('data-region-shot-float', el.style.getPropertyValue('visibility'));
+      el.setAttribute('data-area-screenshot-float', el.style.getPropertyValue('visibility'));
       el.style.setProperty('visibility', 'hidden', 'important');
       n++;
     }
@@ -621,7 +626,7 @@ function hideFloating(kind) {
 }
 
 function restoreFloating(kind) {
-  const FRAME = 'data-region-shot-frame';
+  const FRAME = 'data-area-screenshot-frame';
   const docs = [document];
   if (kind === 'iframe') {
     const f = document.querySelector('[' + FRAME + ']');
@@ -634,11 +639,11 @@ function restoreFloating(kind) {
 
   let n = 0;
   for (const d of docs) {
-    d.querySelectorAll('[data-region-shot-float]').forEach((el) => {
-      const v = el.getAttribute('data-region-shot-float');
+    d.querySelectorAll('[data-area-screenshot-float]').forEach((el) => {
+      const v = el.getAttribute('data-area-screenshot-float');
       if (v) el.style.setProperty('visibility', v, 'important');
       else el.style.removeProperty('visibility');
-      el.removeAttribute('data-region-shot-float');
+      el.removeAttribute('data-area-screenshot-float');
       n++;
     });
   }
@@ -647,19 +652,19 @@ function restoreFloating(kind) {
 
 function clearMark() {
   document
-    .querySelectorAll('[data-region-shot-scroller]')
-    .forEach((e) => e.removeAttribute('data-region-shot-scroller'));
+    .querySelectorAll('[data-area-screenshot-scroller]')
+    .forEach((e) => e.removeAttribute('data-area-screenshot-scroller'));
   document
-    .querySelectorAll('[data-region-shot-frame]')
-    .forEach((e) => e.removeAttribute('data-region-shot-frame'));
+    .querySelectorAll('[data-area-screenshot-frame]')
+    .forEach((e) => e.removeAttribute('data-area-screenshot-frame'));
   return true;
 }
 
 function selectionOverlay(ver, L) {
   return new Promise((resolve) => {
-    const ID = '__region_shot_overlay__';
-    const MARK = 'data-region-shot-scroller';
-    const FRAME_MARK = 'data-region-shot-frame';
+    const ID = '__area_screenshot_overlay__';
+    const MARK = 'data-area-screenshot-scroller';
+    const FRAME_MARK = 'data-area-screenshot-frame';
 
     document.getElementById(ID)?.remove();
     document
@@ -1224,7 +1229,7 @@ function selectionOverlay(ver, L) {
 
       confirmBtn = document.createElement('div');
       confirmBtn.textContent = L.done;
-      confirmBtn.id = '__region_shot_confirm__'; // 测试与脚本用它定位，不依赖界面语言
+      confirmBtn.id = '__area_screenshot_confirm__'; // 测试与脚本用它定位，不依赖界面语言
       confirmBtn.style.cssText = [
         'position:fixed',
         'right:24px',

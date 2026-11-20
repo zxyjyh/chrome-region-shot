@@ -16,7 +16,7 @@ const os = require('os');
 const { decodePNG } = require('./png');
 
 const ROOT = path.resolve(__dirname, '..');
-const TMP = path.join(os.tmpdir(), 'region-shot-clip');
+const TMP = path.join(os.tmpdir(), 'area-screenshot-clip');
 const EXT = path.join(TMP, 'ext');
 const PROFILE = path.join(TMP, 'profile');
 const CHROME = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
@@ -195,7 +195,7 @@ const check = (name, ok, detail = '') => {
 
       const id = crypto.randomUUID();
       const db = await new Promise((resolve, reject) => {
-        const req = indexedDB.open('region-shot', 1);
+        const req = indexedDB.open('area-screenshot', 1);
         req.onupgradeneeded = () => {
           const d = req.result;
           if (!d.objectStoreNames.contains('shots')) d.createObjectStore('shots');

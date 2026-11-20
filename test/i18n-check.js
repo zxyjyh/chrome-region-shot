@@ -13,7 +13,7 @@ const path = require('path');
 const os = require('os');
 
 const ROOT = path.resolve(__dirname, '..');
-const TMP = path.join(os.tmpdir(), 'region-shot-i18n');
+const TMP = path.join(os.tmpdir(), 'area-screenshot-i18n');
 const EXT = path.join(TMP, 'ext');
 const PROFILE = path.join(TMP, 'profile');
 const CHROME = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
@@ -138,7 +138,7 @@ async function openEditor(env) {
 
     const id = crypto.randomUUID();
     const db = await new Promise((resolve, reject) => {
-      const req = indexedDB.open('region-shot', 1);
+      const req = indexedDB.open('area-screenshot', 1);
       req.onupgradeneeded = () => {
         const d = req.result;
         if (!d.objectStoreNames.contains('shots')) d.createObjectStore('shots');
@@ -256,26 +256,26 @@ async function withChrome(lang, port, fn) {
     const uiLang = await env.evalSW(`chrome.i18n.getUILanguage()`);
     check('浏览器 UI 语言是 zh-CN', uiLang === 'zh-CN', uiLang);
     const extName = await env.evalSW(`chrome.i18n.getMessage('extName')`);
-    check('manifest 名称走简体', extName === 'Region Shot · 区域截图', extName);
+    check('manifest 名称走简体', extName === 'Area Screenshot', extName);
 
     const ed = await openEditor(env);
     const s0 = await editorState(ed.evalEd);
     check('自动：编辑页默认简体', s0.htmlLang === 'zh-CN' && s0.select === 'auto' && s0.save === '✓ 保存 PNG', JSON.stringify(s0));
-    check('自动：静态文案是简体', s0.cancel === '取消' && s0.copy === '复制图片' && s0.toolText === '文字' && s0.title === 'Region Shot · 标注');
+    check('自动：静态文案是简体', s0.cancel === '取消' && s0.copy === '复制图片' && s0.toolText === '文字' && s0.title === 'Area Screenshot · 标注');
 
     await switchLang(ed.evalEd, 'zh_TW');
     const s1 = await editorState(ed.evalEd);
     check('手动切繁体立即生效', s1.htmlLang === 'zh-TW' && s1.save === '✓ 儲存 PNG' && s1.copy === '複製圖片', JSON.stringify(s1));
-    check('繁体：提示与标题同步', s1.hint.includes('點擊圖片') && s1.title === 'Region Shot · 標註', s1.hint);
+    check('繁体：提示与标题同步', s1.hint.includes('點擊圖片') && s1.title === 'Area Screenshot · 標註', s1.hint);
 
     await switchLang(ed.evalEd, 'en');
     const s2 = await editorState(ed.evalEd);
     check('手动切英文立即生效', s2.htmlLang === 'en' && s2.save === '✓ Save PNG' && s2.copy === 'Copy image' && s2.cancel === 'Cancel', JSON.stringify(s2));
-    check('英文：提示与标题同步', s2.hint.includes('Click anywhere') && s2.title === 'Region Shot · Annotate', s2.hint);
+    check('英文：提示与标题同步', s2.hint.includes('Click anywhere') && s2.title === 'Area Screenshot · Annotate', s2.hint);
 
     // 框选阶段沿用编辑页的偏好：偏好写入 chrome.storage，background 能解析并读到对应语言包
-    const stored = await env.evalSW(`chrome.storage.local.get('regionShotLang')`);
-    check('语言偏好同步到 chrome.storage', stored.regionShotLang === 'en', JSON.stringify(stored));
+    const stored = await env.evalSW(`chrome.storage.local.get('areaScreenshotLang')`);
+    check('语言偏好同步到 chrome.storage', stored.areaScreenshotLang === 'en', JSON.stringify(stored));
     const resolved = await env.evalSW(`(async () => resolveOverlayLang(await getLangPref()))()`);
     check('框选阶段解析到同一语言', resolved === 'en', resolved);
     const msgs = await env.evalSW(`overlayMessages('en')`);
@@ -298,7 +298,7 @@ async function withChrome(lang, port, fn) {
     const uiLang = await env.evalSW(`chrome.i18n.getUILanguage()`);
     check('浏览器 UI 语言是 en-US', uiLang.startsWith('en'), uiLang);
     const extName = await env.evalSW(`chrome.i18n.getMessage('extName')`);
-    check('manifest 名称走英文', extName === 'Region Shot · Region Capture', extName);
+    check('manifest 名称走英文', extName === 'Area Screenshot', extName);
     const overlay = await env.evalSW(`chrome.i18n.getMessage('overlayStep2')`);
     check('遮罩提示文案走英文', /Step 2/.test(overlay), overlay);
 
@@ -313,7 +313,7 @@ async function withChrome(lang, port, fn) {
     const uiLang = await env.evalSW(`chrome.i18n.getUILanguage()`);
     check('浏览器 UI 语言是 zh-TW', /zh-(TW|HK|MO)/i.test(uiLang), uiLang);
     const extName = await env.evalSW(`chrome.i18n.getMessage('extName')`);
-    check('manifest 名称走繁体', extName === 'Region Shot · 區域截圖', extName);
+    check('manifest 名称走繁体', extName === 'Area Screenshot', extName);
     const overlay = await env.evalSW(`chrome.i18n.getMessage('overlayDone')`);
     check('遮罩完成按钮文案走繁体', overlay === '✓ 完成截圖', overlay);
 

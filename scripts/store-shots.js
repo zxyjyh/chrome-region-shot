@@ -15,7 +15,7 @@ const os = require('os');
 const ROOT = path.resolve(__dirname, '..');
 const OUT = path.join(ROOT, 'store-assets');
 const RAW = path.join(OUT, 'raw');
-const TMP = path.join(os.tmpdir(), 'region-shot-store');
+const TMP = path.join(os.tmpdir(), 'area-screenshot-store');
 const EXT = path.join(TMP, 'ext');
 const DL = path.join(TMP, 'dl');
 const PROFILE = path.join(TMP, 'profile');
@@ -186,7 +186,7 @@ async function launchChrome() {
 
     let ready = false;
     for (let i = 0; i < 40; i++) {
-      ready = await evalPage(`!!document.getElementById('__region_shot_overlay__')`);
+      ready = await evalPage(`!!document.getElementById('__area_screenshot_overlay__')`);
       if (ready) break;
       await sleep(200);
     }

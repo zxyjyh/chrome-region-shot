@@ -1,4 +1,4 @@
-// Region Shot · 编辑页文案与语言切换
+// Area Screenshot · 编辑页文案与语言切换
 //
 // 两层语言机制：
 //   - manifest 的名称/描述、网页遮罩提示 → Chrome 标准 _locales + chrome.i18n，跟随浏览器语言
@@ -8,8 +8,8 @@
 
 const I18N = {
   zh_CN: {
-    editorTitle: 'Region Shot · 标注',
-    brandTitle: 'Region Shot 标注编辑器',
+    editorTitle: 'Area Screenshot · 标注',
+    brandTitle: 'Area Screenshot 标注编辑器',
     brandTag: '标注',
     toolsAria: '标注工具',
     toolText: '文字',
@@ -48,8 +48,8 @@ const I18N = {
   },
 
   zh_TW: {
-    editorTitle: 'Region Shot · 標註',
-    brandTitle: 'Region Shot 標註編輯器',
+    editorTitle: 'Area Screenshot · 標註',
+    brandTitle: 'Area Screenshot 標註編輯器',
     brandTag: '標註',
     toolsAria: '標註工具',
     toolText: '文字',
@@ -88,8 +88,8 @@ const I18N = {
   },
 
   en: {
-    editorTitle: 'Region Shot · Annotate',
-    brandTitle: 'Region Shot annotation editor',
+    editorTitle: 'Area Screenshot · Annotate',
+    brandTitle: 'Area Screenshot annotation editor',
     brandTag: 'Annotate',
     toolsAria: 'Annotation tools',
     toolText: 'Text',
@@ -128,8 +128,9 @@ const I18N = {
   },
 };
 
-const I18N_LANG_KEY = 'regionShotLang'; // localStorage 与 chrome.storage 共用，只存语言偏好
-const I18N_LEGACY_KEY = 'regionShotEditorLang'; // 1.8.0 用过的旧 key，读取时一次性兼容
+const I18N_LANG_KEY = 'areaScreenshotLang'; // localStorage 与 chrome.storage 共用，只存语言偏好
+// 改名前的旧 key，只读兼容一次：1.8.3 的 regionShotLang、1.8.0 的 regionShotEditorLang
+const I18N_LEGACY_KEYS = ['regionShotLang', 'regionShotEditorLang'];
 const I18N_MODES = ['auto', 'zh_CN', 'zh_TW', 'en'];
 
 let i18nMode = 'auto'; // auto | zh_CN | zh_TW | en
@@ -191,10 +192,17 @@ function i18nApply() {
 function i18nInit() {
   let stored = 'auto';
   try {
-    stored =
-      localStorage.getItem(I18N_LANG_KEY) ||
-      localStorage.getItem(I18N_LEGACY_KEY) ||
-      'auto';
+    stored = localStorage.getItem(I18N_LANG_KEY);
+    if (stored == null) {
+      for (const key of I18N_LEGACY_KEYS) {
+        const old = localStorage.getItem(key);
+        if (old != null) {
+          stored = old;
+          break;
+        }
+      }
+    }
+    stored = stored || 'auto';
   } catch {
     /* ignore */
   }

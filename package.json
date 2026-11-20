@@ -1,8 +1,8 @@
 {
-  "name": "region-shot",
-  "version": "1.8.4",
+  "name": "area-screenshot",
+  "version": "1.8.5",
   "private": true,
-  "description": "Region Shot · 区域截图 — Chrome 扩展",
+  "description": "Area Screenshot — Chrome 扩展",
   "scripts": {
     "icons": "node scripts/build-icons.js",
     "pack": "node scripts/pack.js",

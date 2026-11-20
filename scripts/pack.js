@@ -182,7 +182,7 @@ warn.forEach((w) => console.warn('! ' + w));
 
 // ---------- 打包 ----------
 fs.mkdirSync(OUT_DIR, { recursive: true });
-const zipName = `region-shot-${version || 'unknown'}.zip`;
+const zipName = `area-screenshot-${version || 'unknown'}.zip`;
 const zipPath = path.join(OUT_DIR, zipName);
 if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
 

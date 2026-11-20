@@ -1,6 +1,6 @@
 {
   "extName": {
-    "message": "Region Shot · 区域截图"
+    "message": "Area Screenshot"
   },
   "extDescription": {
     "message": "拖拽定起点，滚动到结束位置，截取任意长页面；在截图上添加文字、箭头、矩形后保存为 PNG 或直接复制到剪贴板。"

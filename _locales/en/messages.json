@@ -1,6 +1,6 @@
 {
   "extName": {
-    "message": "Region Shot · Region Capture"
+    "message": "Area Screenshot"
   },
   "extDescription": {
     "message": "Drag a start point, scroll to the end, capture any long page region as one PNG, annotate it, then save or copy it."

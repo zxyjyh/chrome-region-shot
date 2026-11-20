@@ -18,7 +18,7 @@ const ROOT = path.resolve(__dirname, '..');
 const ICONS = path.join(ROOT, 'icons');
 const CHROME = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.CDP_PORT || 9343);
-const TMP = path.join(os.tmpdir(), 'region-shot-icons');
+const TMP = path.join(os.tmpdir(), 'area-screenshot-icons');
 
 // 哪个 SVG 出哪个尺寸
 const JOBS = [
@@ -83,7 +83,7 @@ function connect(wsUrl) {
 (async () => {
   // 端口被上一次崩溃残留的 Chrome 占着时，新实例会静默退出，然后连到旧实例上失败
   if (!(await portFree(PORT))) {
-    throw new Error(`调试端口 ${PORT} 被占用，先执行：pkill -f "region-shot-icons/profile" 或设置 CDP_PORT=其他端口`);
+    throw new Error(`调试端口 ${PORT} 被占用，先执行：pkill -f "area-screenshot-icons/profile" 或设置 CDP_PORT=其他端口`);
   }
 
   fs.rmSync(TMP, { recursive: true, force: true });

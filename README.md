@@ -1,4 +1,4 @@
-# Region Shot · 区域截图
+# Area Screenshot
 
 一个 Chrome 扩展：在网页上框选起始位置和宽度，滚动到结束位置确认，截取这一整块内容（可以跨越多屏），保存为 PNG。
 
@@ -146,7 +146,7 @@ npm run icons
 npm run pack
 ```
 
-产物在 `dist/region-shot-<version>.zip`。文件清单从 manifest 反推，`test/`、`scripts/`、`*.md` 不会被打进去。详细的上架流程见 `PUBLISHING.md`，表单文案见 `store-listing.md`。
+产物在 `dist/area-screenshot-<version>.zip`。文件清单从 manifest 反推，`test/`、`scripts/`、`*.md` 不会被打进去。详细的上架流程见 `PUBLISHING.md`，表单文案见 `store-listing.md`。
 
 ## 可扩展方向
 

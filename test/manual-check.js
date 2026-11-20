@@ -16,7 +16,7 @@ const os = require('os');
 const { readImage } = require('./png.js');
 
 const ROOT = path.resolve(__dirname, '..');
-const TMP = path.join(os.tmpdir(), 'region-shot-manual');
+const TMP = path.join(os.tmpdir(), 'area-screenshot-manual');
 const EXT = path.join(TMP, 'ext');
 const DL = path.join(TMP, 'dl');
 const PROFILE = path.join(TMP, 'profile');
@@ -206,7 +206,7 @@ const check = (name, ok, detail = '') => {
 
     let ready = false;
     for (let i = 0; i < 40; i++) {
-      ready = await evalPage(`!!document.getElementById('__region_shot_overlay__')`);
+      ready = await evalPage(`!!document.getElementById('__area_screenshot_overlay__')`);
       if (ready) break;
       await sleep(200);
     }
@@ -245,7 +245,7 @@ const check = (name, ok, detail = '') => {
 
     // ---- 3. 完成 ----
     const btn = await evalPage(`(() => {
-      const b = document.getElementById('__region_shot_confirm__');
+      const b = document.getElementById('__area_screenshot_confirm__');
       if (!b) return null;
       const r = b.getBoundingClientRect();
       return { x: r.left + r.width / 2, y: r.top + r.height / 2 };

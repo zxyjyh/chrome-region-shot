@@ -1,7 +1,7 @@
 # Chrome 应用商店上架材料
 
-> 对应版本：`1.8.4`（三语界面 + 复制图片；1.8.4 选区改为跟随滚动、平滑补齐尾差）
-> 更新日期：2026-11-20（初版 2026-11-17 对应 1.7.0；1.8.3 新增三语界面、复制图片；1.8.4 修复选区跳变）
+> 对应版本：`1.8.5`（项目更名为 Area Screenshot；三语界面 + 复制图片；选区跟随滚动、平滑补齐尾差）
+> 更新日期：2026-11-20（初版 2026-11-17 对应 1.7.0；1.8.3 新增三语界面、复制图片；1.8.4 修复选区跳变；1.8.5 更名）
 > 配套文件：`privacy-policy.html`（隐私政策页面，需要托管到公网 URL）
 
 ---
@@ -20,7 +20,7 @@
 
 ### 名称
 ```
-Region Shot · 区域截图
+Area Screenshot
 ```
 
 ### 简短描述（说明字段，上限 132 字符，官方已验证）
@@ -46,13 +46,13 @@ Capture any long page region as a single PNG: pick an area, scroll to the end, a
 ### 详细描述（中文）
 
 ```
-Region Shot 解决一个别的截图工具没解决的问题：你只想截网页里的某一块，但这一块比屏幕高。
+Area Screenshot 解决一个别的截图工具没解决的问题：你只想截网页里的某一块，但这一块比屏幕高。
 
 常见做法有两种，都不好用——
 截整页：图太长，上下全是你不要的页头页脚和侧边栏；
 截可视区域：内容一多就截不全，得手动拼。
 
-Region Shot 让你先框出要的那一列，再滚到结束位置，把中间所有内容一次截完，输出一张干净的 PNG。
+Area Screenshot 让你先框出要的那一列，再滚到结束位置，把中间所有内容一次截完，输出一张干净的 PNG。
 
 怎么用
 
@@ -100,13 +100,13 @@ Mac 触摸板上「按住拖拽」和「两指滚动」没法同时做，所以�
 ### 详细描述（繁體中文）
 
 ```
-Region Shot 解決一個其他截圖工具沒解決的問題：你只想截網頁裡的某一塊，但這一塊比螢幕高。
+Area Screenshot 解決一個其他截圖工具沒解決的問題：你只想截網頁裡的某一塊，但這一塊比螢幕高。
 
 常見做法有兩種，都不好用——
 截整頁：圖太長，上下全是你不要的頁首頁尾和側邊欄；
 截可視區域：內容一多就截不全，得手動拼接。
 
-Region Shot 讓你先框出要的那一欄，再捲動到結束位置，把中間所有內容一次截完，輸出一張乾淨的 PNG。
+Area Screenshot 讓你先框出要的那一欄，再捲動到結束位置，把中間所有內容一次截完，輸出一張乾淨的 PNG。
 
 怎麼用
 
@@ -154,11 +154,11 @@ Mac 觸控板上「按住拖曳」和「兩指捲動」沒辦法同時做，所�
 ### 详细描述（English）
 
 ```
-Region Shot solves a problem most screenshot tools don't: you want to capture one section of a web page, but that section is taller than your screen.
+Area Screenshot solves a problem most screenshot tools don't: you want to capture one section of a web page, but that section is taller than your screen.
 
 The usual workarounds are both poor. A full-page capture gives you a very tall image full of headers, footers and sidebars you didn't want. A viewport capture cuts off anything longer than one screen.
 
-Region Shot lets you define the start point and width of a region, scroll to where it should end, and receive everything in between as a single clean PNG.
+Area Screenshot lets you define the start point and width of a region, scroll to where it should end, and receive everything in between as a single clean PNG.
 
 How to use:
 1. Click the extension icon, or press Alt+Shift+S
@@ -268,9 +268,9 @@ NOTE: this extension does NOT work in the background. If the debugger permission
 ```
 Used for exactly one purpose: remembering the user's interface-language choice.
 
-The extension ships its UI text in English, Simplified Chinese and Traditional Chinese. The annotation editor has a language selector (auto / 简体中文 / 繁體中文 / English). When the user picks one, the value is written with chrome.storage.local.set({ regionShotLang: ... }) and mirrored into the editor page's own localStorage so the editor can read it synchronously without a flash of the wrong language.
+The extension ships its UI text in English, Simplified Chinese and Traditional Chinese. The annotation editor has a language selector (auto / 简体中文 / 繁體中文 / English). When the user picks one, the value is written with chrome.storage.local.set({ areaScreenshotLang: ... }) and mirrored into the editor page's own localStorage so the editor can read it synchronously without a flash of the wrong language. The pre-rename keys `regionShotLang` / `regionShotEditorLang` are still read once for backward compatibility, then the new key is written.
 
-background.js calls chrome.storage.local.get('regionShotLang') once per capture, so the region-selection overlay is shown in the same language the user chose.
+background.js calls chrome.storage.local.get(['areaScreenshotLang', 'regionShotLang', 'regionShotEditorLang']) once per capture, so the region-selection overlay is shown in the same language the user chose — including a preference saved before the rename.
 
 Stored data: a single string, one of "auto", "zh_CN", "zh_TW", "en". Nothing else is written, no other storage area is used, and no cookies are used.
 ```
@@ -367,7 +367,7 @@ Purpose: app functionality only — drawing the selection overlay and computing 
 No account or credentials are required. Everything runs locally.
 
 1. Open any long public article, for example https://en.wikipedia.org/wiki/Screenshot
-2. Click the Region Shot toolbar icon (or press Alt+Shift+S).
+2. Click the Area Screenshot toolbar icon (or press Alt+Shift+S).
 3. In the middle of the article body, press the mouse and drag 200-300px horizontally, then release. A green selection outline appears and a "Done" button appears at the bottom right of the selection.
 4. Scroll down with the mouse wheel. The selection extends smoothly with each scroll step and the live dimension indicator updates. Scroll to the end of the page: the selection reaches the real bottom of the content.
 5. Click the "Done" button once the selection is several screens tall.
@@ -390,7 +390,7 @@ Press Esc or right-click to cancel at any stage.
 - [ ] 128×128 图标 PNG，manifest 加 `"icons": { "128": "icon128.png" }`
 - [x] 1280×800 商店截图（1–5 张，满版无留白）：`store-assets/screenshot-1.png`（框选）、`screenshot-2.png`（滚动延伸）、`screenshot-3.png`（标注）、`screenshot-4.png`（整图预览）、`screenshot-5.png`（导出长图）
 - [x] 5 张商店截图已补齐（滚动延伸中 / 完成按钮特写未单独出图，第 2、4 张已覆盖这两个卖点）
-- [ ] 打包 zip：`npm run pack` → `dist/region-shot-1.8.3.zip`（清单从 manifest + background 的 `getURL()` 反推：background.js、editor.html/css/js、i18n.js、`_locales/`、icons/、manifest.json；`test/`、`scripts/`、`*.md` 不会进包）
+- [x] 打包 zip：`npm run pack` → `dist/area-screenshot-1.8.5.zip`（清单从 manifest + background 的 `getURL()` 反推：background.js、editor.html/css/js、i18n.js、`_locales/`、icons/、manifest.json；`test/`、`scripts/`、`*.md` 不会进包）
 - [ ] 注册 Chrome Web Store 开发者账号（一次性 $5，官方页面：https://chrome.google.com/webstore/devconsole）
 - [ ] 填写 Privacy practices 全部字段（本文件 §2–§5）
 - [ ] 提交审核
@@ -433,9 +433,9 @@ Press Esc or right-click to cancel at any stage.
 | 隐私政策至少说明收集/使用/分享三要素 | User Data FAQ Q7 | 已验证（官方页面） |
 | Limited Use 要求网站上有肯定性声明 | limited-use 政策原文 | 已验证（官方页面） |
 | 代码无远程网络请求 | `grep -nE "fetch\(|XMLHttpRequest|WebSocket"` → 仅 1 处 `fetch(dataUrl)` | 已验证（读代码） |
-| 本地存储内容 | 只用一个 IndexedDB 交接截图，编辑器读到即删；1.8.0 起另有界面语言偏好写入 `chrome.storage.local` + 编辑器页 `localStorage`（`grep -n "chrome.storage"` → background.js:387 读、i18n.js:168 写，均只碰 `regionShotLang`）；无 Cookie | 已验证（读代码，2026-11-19） |
+| 本地存储内容 | 只用一个 IndexedDB 交接截图，编辑器读到即删；1.8.0 起另有界面语言偏好写入 `chrome.storage.local` + 编辑器页 `localStorage`（`grep -n "chrome.storage"` → background.js:388 读、i18n.js:169 写，均只碰 `areaScreenshotLang`，旧版 `regionShotLang` / `regionShotEditorLang` 仅读取兜底）；无 Cookie | 已验证（读代码，2026-11-19） |
 | 简短描述上限 132 字符 | 官方 prepare 页面原文 "A string of no more than 132 characters" | 已验证（官方页面，2026-11-19 抓取） |
-| 标题 / 详细描述的字符上限 | — | **未核**（本次抓取的官方页面未写明；实测标题 18 / 18 / 28 字符，详细描述 1132 / 1156 / 2648 字符，远低于常见的 45 / 16000 限制） |
+| 标题 / 详细描述的字符上限 | — | **未核**（本次抓取的官方页面未写明；实测标题 15 字符（三语同名），详细描述 1153 / 1179 / 2723 字符（正文块 `.length`，含换行），远低于常见的 45 / 16000 限制） |
 | 唯一 CDP 命令是 `Page.captureScreenshot` | `grep -n "sendCommand"` → 1 处 | 已验证（读代码） |
 | detach 在 finally 里 | background.js 的 `runCapture` | 已验证（读代码） |
 | 截图后恢复滚动位置 | `scrollToPosition(tab.id, ..., sel.scrollStart, sel.scrollStartX)` | 已验证（读代码 + e2e） |

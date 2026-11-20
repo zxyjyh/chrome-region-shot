@@ -59,7 +59,7 @@ npm run pack
 打包后自查：
 
 ```bash
-unzip -l dist/region-shot-1.6.0.zip
+unzip -l dist/area-screenshot-1.8.5.zip
 ```
 
 输出里必须能看到顶格的 `manifest.json`。

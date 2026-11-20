@@ -23,7 +23,7 @@ const path = require('path');
 const os = require('os');
 
 const ROOT = path.resolve(__dirname, '..');
-const TMP = path.join(os.tmpdir(), 'region-shot-phase2');
+const TMP = path.join(os.tmpdir(), 'area-screenshot-phase2');
 const EXT = path.join(TMP, 'ext');
 const DL = path.join(TMP, 'dl');
 const PROFILE = path.join(TMP, 'profile');
@@ -196,7 +196,7 @@ const check = (name, ok, detail = '') => {
 
     let ready = false;
     for (let i = 0; i < 40; i++) {
-      ready = await evalPage(`!!document.getElementById('__region_shot_overlay__')`);
+      ready = await evalPage(`!!document.getElementById('__area_screenshot_overlay__')`);
       if (ready) break;
       await sleep(200);
     }
@@ -206,12 +206,12 @@ const check = (name, ok, detail = '') => {
     const state = () => evalPage(`(() => {
       const els = [...document.documentElement.children];
       const box = els.find(e => e.style && e.style.borderColor === 'rgb(16, 185, 129)');
-      const btn = document.getElementById('__region_shot_confirm__');
+      const btn = document.getElementById('__area_screenshot_confirm__');
       const r = box ? box.getBoundingClientRect() : null;
       const b = btn ? btn.getBoundingClientRect() : null;
       const se = document.scrollingElement || document.documentElement;
       return {
-        overlay: !!document.getElementById('__region_shot_overlay__'),
+        overlay: !!document.getElementById('__area_screenshot_overlay__'),
         y: Math.round(window.scrollY),
         boxW: r ? Math.round(r.width) : 0,
         boxH: r ? Math.round(r.height) : 0,
